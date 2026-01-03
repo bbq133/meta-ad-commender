@@ -23,7 +23,7 @@ function App() {
             budget: 5000,
             targetType: 'ROI',
             targetValue: 4.5,
-            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AO-' }],
+            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AO' }],
             campaignPeriod: {
                 startDate: '2025-12-01',
                 endDate: '2025-12-31'
@@ -36,7 +36,7 @@ function App() {
             budget: 3000,
             targetType: 'ROI',
             targetValue: 5.0,
-            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AI-' }],
+            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AI' }],
             campaignPeriod: {
                 startDate: '2025-12-15',
                 endDate: '2026-01-15'
