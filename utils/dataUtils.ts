@@ -44,6 +44,8 @@ export const calculateMetrics = (records: RawAdRecord[]): AggregatedMetrics => {
         aov: purchases > 0 ? purchase_value / purchases : 0,
         // 新增中间转化指标
         click_to_pv_rate: link_clicks > 0 ? landing_page_views / link_clicks : 0,
+        // 验证Click-to-PV数据
+        ...(link_clicks > 0 && landing_page_views > link_clicks && console.warn(`⚠️ Click-to-PV异常: LPV=${landing_page_views}, Clicks=${link_clicks}, Rate=${((landing_page_views/link_clicks)*100).toFixed(2)}%`), {}),
         checkout_rate: adds_to_cart > 0 ? checkouts_initiated / adds_to_cart : 0,
         purchase_rate: checkouts_initiated > 0 ? purchases / checkouts_initiated : 0,
         frequency: calculatedFrequency,
@@ -273,3 +275,11 @@ export const calculateTotalBudget = (
 
     return { totalBudget, breakdown };
 };
+
+// 添加数据验证函数
+export function validateClickToPvRate(landing_page_views: number, link_clicks: number): void {
+    if (link_clicks > 0 && landing_page_views > link_clicks) {
+        console.warn(`⚠️ 数据异常: Landing Page Views (${landing_page_views}) > Link Clicks (${link_clicks})`);
+        console.warn(`   Click-to-PV Rate = ${((landing_page_views / link_clicks) * 100).toFixed(2)}%`);
+    }
+}
