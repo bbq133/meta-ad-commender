@@ -225,41 +225,41 @@ export const GuidanceDetailPanel: React.FC<{
                 </div>
             )}
 
-            {/* 第4行：调优建议详情（紧凑单行） */}
-            <div className="text-sm leading-relaxed space-x-2 flex flex-wrap items-center gap-y-1">
-                {/* 优先级 */}
-                <span className="inline-flex items-center gap-1">
-                    <span className="font-medium text-slate-600">🎯</span>
-                    {getPriorityBadge(guidance)}
-                </span>
+            {/* 第4行：不合格指标 */}
+            <div className="mb-3">
+                <div className="text-sm font-medium text-slate-700 mb-2">不合格指标</div>
+                <div className="text-sm leading-relaxed space-x-2 flex flex-wrap items-center gap-y-1">
+                    {/* 优先级 */}
+                    <span className="inline-flex items-center gap-1">
+                        {getPriorityBadge(guidance)}
+                    </span>
 
-                {/* 分隔符 */}
-                <span className="text-slate-300">|</span>
+                    {/* 触发条件 */}
+                    {conditions.length > 0 && (
+                        <>
+                            <span className="text-slate-300">|</span>
+                            <span className="font-medium text-slate-600">📊</span>
+                            <div className="inline-flex flex-wrap gap-1">
+                                {conditions.map((cond, idx) => (
+                                    <React.Fragment key={idx}>
+                                        <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-xs">
+                                            {cond}
+                                        </span>
+                                        {idx < conditions.length - 1 && <span className="text-slate-400">|</span>}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
 
-                {/* 触发条件 */}
-                {conditions.length > 0 && (
-                    <>
-                        <span className="font-medium text-slate-600">📊</span>
-                        <div className="inline-flex flex-wrap gap-1">
-                            {conditions.map((cond, idx) => (
-                                <React.Fragment key={idx}>
-                                    <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-xs">
-                                        {cond}
-                                    </span>
-                                    {idx < conditions.length - 1 && <span className="text-slate-400">|</span>}
-                                </React.Fragment>
-                            ))}
-                        </div>
-                        <span className="text-slate-300">|</span>
-                    </>
-                )}
-
-
-                {/* 建议动作 - 每个场景换行显示 */}
-                <span className="inline-flex items-start gap-1">
-                    <span className="font-medium text-slate-600">📋</span>
+            {/* 第5行：调优建议 */}
+            <div>
+                <div className="text-sm font-medium text-slate-700 mb-2">调优建议</div>
+                <div className="text-sm leading-relaxed">
                     <span className="font-medium text-slate-900 whitespace-pre-line">{guidance}</span>
-                </span>
+                </div>
             </div>
 
             {/* 诊断详情区域（仅Campaign层级且有diagnosticDetails时显示） */}
