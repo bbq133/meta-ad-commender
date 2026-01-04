@@ -13,6 +13,8 @@ export interface RawAdRecord {
   checkouts_initiated: number;
   level?: 'Campaign' | 'AdSet' | 'Ad';  // 数据层级
   reach?: number;  // 触达人数（用于 CPM 类型）
+  landing_page_views?: number;  // 落地页浏览量（用于 Click-to-PV Rate 计算）
+  frequency?: number;  // 广告展示频次（用于场景6诊断）
 }
 
 // 聚合指标
@@ -24,6 +26,7 @@ export interface AggregatedMetrics {
   purchase_value: number;
   adds_to_cart: number;
   checkouts_initiated: number;
+  landing_page_views?: number;  // 落地页浏览量
   roi: number;
   cpa: number;
   cpc: number;
@@ -34,6 +37,11 @@ export interface AggregatedMetrics {
   acos: number;
   cvr: number;
   aov: number;
+  // 新增中间转化指标
+  click_to_pv_rate: number;  // Landing Page Views / Link Clicks
+  checkout_rate: number;      // Checkouts Initiated / Adds to Cart
+  purchase_rate: number;      // Purchases / Checkouts Initiated
+  frequency?: number;         // 广告展示频次
 }
 
 // 广告层级分类

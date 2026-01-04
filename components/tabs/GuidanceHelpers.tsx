@@ -1,7 +1,9 @@
 // 调优指导相关的辅助函数和组件
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Lightbulb, AlertCircle, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { getTriggeredConditions, getPriorityLevel, CampaignMetrics } from '../../utils/optimizationRules';
+import { DiagnosticDetail } from '../../utils/campaignDiagnostics';
+import { DiagnosticFlowPanel } from '../diagnostics/DiagnosticFlowPanel';
 
 // 切换展开状态
 export const toggleGuidance = (expandedSet: Set<string>, setExpanded: (s: Set<string>) => void, id: string) => {
@@ -65,14 +67,17 @@ export const GuidanceDetailPanel: React.FC<{
     intermediateMetrics?: any;
     intermediateAvgMetrics?: any;
     lastMetrics?: any;
-}> = ({ guidance, metrics, avgMetrics, kpiType, intermediateMetrics, intermediateAvgMetrics, lastMetrics }) => {
+    diagnosticDetails?: DiagnosticDetail[];  // 修改：支持多个诊断详情
+}> = ({ guidance, metrics, avgMetrics, kpiType, intermediateMetrics, intermediateAvgMetrics, lastMetrics, diagnosticDetails }) => {
+    const [showDiagnosticFlow, setShowDiagnosticFlow] = useState(false);
+    const [activeScenarioIndex, setActiveScenarioIndex] = useState(0);
     const conditions = getTriggeredConditions(metrics as CampaignMetrics, avgMetrics as CampaignMetrics, kpiType);
 
-    // 定义要显示的关键指标（根据KPI类型）
+    // 定义要显示的关键指标（根据KPI类型，按转化漏斗顺序）
     const keyMetrics = kpiType === 'ROI'
-        ? ['cvr', 'aov', 'cpa', 'cpatc', 'atc_rate', 'ctr', 'cpc'] // ROI类型不显示CPM
+        ? ['ctr', 'click_to_pv_rate', 'atc_rate', 'checkout_rate', 'purchase_rate', 'cvr', 'cpc', 'cpm', 'cpa', 'cpatc', 'aov', 'frequency'] // ROI类型显示完整漏斗
         : kpiType === 'CPC'
-            ? ['ctr', 'cpm', 'clicks', 'impressions', 'cpc']
+            ? ['ctr', 'cpm', 'clicks', 'impressions', 'cpc', 'frequency']
             : ['cpm', 'reach', 'impressions', 'frequency'];
 
     const metricLabels: Record<string, string> = {
@@ -88,21 +93,37 @@ export const GuidanceDetailPanel: React.FC<{
         impressions: 'Impress',
         reach: 'Reach',
         frequency: 'Freq',
+        // 新增中间转化指标
+        click_to_pv_rate: 'Click-to-PV',
+        checkout_rate: 'Checkout',
+        purchase_rate: 'Purchase',
     };
 
     // 格式化数值
     const formatValue = (val: number | undefined, metricName: string): string => {
         if (val === undefined || val === null) return 'N/A';
 
+        // 百分比指标（注意：这些指标已经是百分比格式，如2.5表示2.5%）
         if (metricName === 'cvr' || metricName === 'ctr' || metricName === 'atc_rate') {
             return `${val.toFixed(2)}%`;
-        } else if (metricName === 'cpc' || metricName === 'cpm' || metricName === 'cpa' || metricName === 'cpatc' || metricName === 'aov') {
+        }
+        // 新增的转化率指标（小数格式，需要乘100）
+        else if (metricName === 'click_to_pv_rate' || metricName === 'checkout_rate' || metricName === 'purchase_rate') {
+            return `${(val * 100).toFixed(2)}%`;
+        }
+        // 货币指标
+        else if (metricName === 'cpc' || metricName === 'cpm' || metricName === 'cpa' || metricName === 'cpatc' || metricName === 'aov') {
             return `$${val.toFixed(2)}`;
-        } else if (metricName === 'frequency') {
+        }
+        // 频次
+        else if (metricName === 'frequency') {
             return val.toFixed(1);
-        } else if (metricName === 'clicks' || metricName === 'impressions' || metricName === 'reach') {
+        }
+        // 数量指标
+        else if (metricName === 'clicks' || metricName === 'impressions' || metricName === 'reach') {
             return val.toLocaleString();
-        } else {
+        }
+        else {
             return val.toFixed(2);
         }
     };
@@ -233,12 +254,65 @@ export const GuidanceDetailPanel: React.FC<{
                     </>
                 )}
 
-                {/* 建议动作 */}
+
+                {/* 建议动作 - 每个场景换行显示 */}
                 <span className="inline-flex items-start gap-1">
                     <span className="font-medium text-slate-600">📋</span>
-                    <span className="font-medium text-slate-900">{guidance}</span>
+                    <span className="font-medium text-slate-900 whitespace-pre-line">{guidance}</span>
                 </span>
             </div>
+
+            {/* 诊断详情区域（仅Campaign层级且有diagnosticDetails时显示） */}
+            {diagnosticDetails && diagnosticDetails.length > 0 && (
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                    <button
+                        onClick={() => setShowDiagnosticFlow(!showDiagnosticFlow)}
+                        className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                        {showDiagnosticFlow ? (
+                            <ChevronDown className="w-4 h-4" />
+                        ) : (
+                            <ChevronRight className="w-4 h-4" />
+                        )}
+                        <span>查看诊断详情</span>
+                        <span className="text-xs text-slate-500">
+                            （{diagnosticDetails.length}个场景）
+                        </span>
+                    </button>
+
+                    {showDiagnosticFlow && (
+                        <div className="mt-3">
+                            {/* Tab导航栏 - 仅在多场景时显示 */}
+                            {diagnosticDetails.length > 1 && (
+                                <div className="flex gap-1 mb-3 border-b border-slate-200">
+                                    {diagnosticDetails.map((detail, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => setActiveScenarioIndex(index)}
+                                            className={`px-3 py-2 text-sm font-medium transition-all border-b-2 ${activeScenarioIndex === index
+                                                ? 'border-blue-600 text-blue-600 bg-blue-50'
+                                                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            场景{index + 1}: {detail.scenario}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* 当前激活场景的诊断流程 */}
+                            <div className="border border-slate-200 rounded-lg p-3">
+                                {diagnosticDetails.length === 1 && (
+                                    <div className="text-sm font-semibold text-slate-700 mb-3">
+                                        {diagnosticDetails[0].scenario}
+                                    </div>
+                                )}
+                                <DiagnosticFlowPanel detail={diagnosticDetails[activeScenarioIndex]} />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

@@ -18,6 +18,10 @@ export interface IntermediateMetrics {
     impressions?: number; // 展示次数
     clicks?: number;     // 点击次数
     purchases?: number;  // 购买次数
+    // 新增中间转化指标
+    click_to_pv_rate?: number;  // Click-to-PV Rate (小数格式)
+    checkout_rate?: number;      // Checkout Rate (小数格式)
+    purchase_rate?: number;      // Purchase Rate (小数格式)
 }
 
 export interface ActionCampaign {
@@ -120,6 +124,11 @@ const calculateMetrics = (records: RawAdRecord[]): IntermediateMetrics => {
     const totalPurchaseValue = records.reduce((sum, r) => sum + r.purchase_value, 0);
     const totalATC = records.reduce((sum, r) => sum + r.adds_to_cart, 0);
     const totalReach = records.reduce((sum, r) => sum + (r.reach || 0), 0);
+    const totalCheckouts = records.reduce((sum, r) => sum + (r.checkouts_initiated || 0), 0);
+    const totalLandingPageViews = records.reduce((sum, r) => sum + (r.landing_page_views || 0), 0);
+
+    // 计算频次（Frequency）- 总曝光数 ÷ 总触达人数
+    const calculatedFrequency = totalReach > 0 ? totalImpressions / totalReach : 0;
 
     return {
         ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
@@ -130,11 +139,15 @@ const calculateMetrics = (records: RawAdRecord[]): IntermediateMetrics => {
         atc_rate: totalClicks > 0 ? (totalATC / totalClicks) * 100 : 0,
         cpatc: totalATC > 0 ? totalSpend / totalATC : 0,
         aov: totalPurchases > 0 ? totalPurchaseValue / totalPurchases : 0,
-        frequency: totalReach > 0 ? totalImpressions / totalReach : 0,
+        frequency: calculatedFrequency,
         reach: totalReach,
         impressions: totalImpressions,
         clicks: totalClicks,
         purchases: totalPurchases,
+        // 新增中间转化指标（注意：这些是小数格式，不是百分比）
+        click_to_pv_rate: totalClicks > 0 ? totalLandingPageViews / totalClicks : 0,
+        checkout_rate: totalATC > 0 ? totalCheckouts / totalATC : 0,
+        purchase_rate: totalCheckouts > 0 ? totalPurchases / totalCheckouts : 0,
     };
 };
 

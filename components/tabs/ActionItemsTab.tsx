@@ -16,6 +16,9 @@ import { SearchInput } from '../filters/SearchInput';
 import { MultiSelect } from '../filters/MultiSelect';
 import { getOptimizationGuidance, getTriggeredConditions, getPriorityLevel, CampaignMetrics } from '../../utils/optimizationRules';
 import { toggleGuidance, getPriorityIcon, getPriorityBadge, GuidanceDetailPanel } from './GuidanceHelpers';
+// 新增：导入诊断引擎和Benchmark计算器
+import { diagnoseCampaign, diagnoseCampaignWithContext, DiagnosticResult, CampaignContext, convertToDetailedDiagnostic, diagnoseAllScenarios } from '../../utils/campaignDiagnostics';
+import { calculateBenchmarks, CampaignBenchmarks } from '../../utils/benchmarkCalculator';
 
 interface ActionItemsTabProps {
     data: RawAdRecord[];
@@ -387,6 +390,43 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
         }
     }, [naResult, naRemovedIds, naFilterLevel, naKPI, naSearchText, naBusinessLineFilter]);
 
+    // 计算Campaign的Benchmark基准值（用于新的诊断引擎）
+    const campaignBenchmarks = useMemo(() => {
+        if (!filteredBlResult || filteredBlResult.campaigns.length === 0) {
+            return null;
+        }
+
+        // 将Campaign数据转换为calculateBenchmarks需要的格式
+        const campaignsWithMetrics = filteredBlResult.campaigns.map(c => ({
+            metrics: {
+                spend: c.spend,
+                impressions: c.metrics?.impressions || 0,
+                link_clicks: c.metrics?.clicks || 0,
+                purchases: c.metrics?.purchases || 0,
+                purchase_value: c.metrics?.purchase_value || 0,
+                adds_to_cart: c.metrics?.adds_to_cart || 0,
+                checkouts_initiated: c.metrics?.checkouts_initiated || 0,
+                roi: c.metrics?.roi || 0,
+                cpa: c.metrics?.cpa || 0,
+                cpc: c.metrics?.cpc || 0,
+                ctr: c.metrics?.ctr || 0,
+                cpm: c.metrics?.cpm || 0,
+                cpatc: c.metrics?.cpatc || 0,
+                atc_rate: c.metrics?.atc_rate || 0,
+                acos: c.metrics?.acos || 0,
+                cvr: c.metrics?.cvr || 0,
+                aov: c.metrics?.aov || 0,
+                // 新增的中间转化指标
+                click_to_pv_rate: c.metrics?.click_to_pv_rate || 0,
+                checkout_rate: c.metrics?.checkout_rate || 0,
+                purchase_rate: c.metrics?.purchase_rate || 0,
+                frequency: c.metrics?.frequency || 0,
+            }
+        }));
+
+        return calculateBenchmarks(campaignsWithMetrics);
+    }, [filteredBlResult]);
+
     // 生成 Action Items
     const handleGenerate = () => {
         setIsLoading(true);
@@ -629,7 +669,114 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                         frequency: campaign.avgMetrics?.frequency,
                                                     };
 
-                                                    const guidance = getOptimizationGuidance('Campaign', campaign.kpiType, metrics, avgMetrics);
+
+                                                    // 使用新的诊断引擎（仅针对ROI类型的Campaign）
+                                                    let guidance: string;
+                                                    let diagnosticResult: DiagnosticResult | null = null;
+                                                    let context: CampaignContext | undefined;
+
+                                                    if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
+                                                        // 计算上下文数据（用于场景5和6）
+
+                                                        // 1. 计算AdSet数量
+                                                        const adsetCount = new Set(
+                                                            data
+                                                                .filter(r => r.campaign_name === campaign.campaignName)
+                                                                .map(r => r.adset_name)
+                                                        ).size;
+
+                                                        // 2. 计算运行天数
+                                                        const start = new Date(dateRange.start);
+                                                        const end = new Date(dateRange.end);
+                                                        const diffTime = Math.abs(end.getTime() - start.getTime());
+                                                        const activeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // 包含起始日
+
+                                                        // 3. 计算日预算和Campaign总预算
+                                                        const config = configs.find(c => c.id === campaign.businessLineId);
+                                                        const totalBudget = config?.budget || 0;
+                                                        const dailyBudget = totalBudget / activeDays / filteredBlResult.campaigns.length;
+                                                        const campaignBudget = dailyBudget * activeDays;
+
+                                                        // 4. 构建上下文对象
+                                                        context = {
+                                                            adsetCount,
+                                                            activeDays,
+                                                            dailyBudget,
+                                                            campaignBudget
+                                                        };
+
+                                                        // 5. 使用扩展的诊断函数（包含场景5和6）
+                                                        diagnosticResult = diagnoseCampaignWithContext(
+                                                            {
+                                                                ...metrics,
+                                                                // 确保包含所有新增的中间指标
+                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                frequency: campaign.metrics?.frequency || 0,
+                                                            } as any,
+                                                            campaignBenchmarks,
+                                                            context  // 传入上下文数据
+                                                        );
+
+                                                        // 获取所有匹配的诊断场景（支持多场景显示）
+                                                        const allDiagnosticResults = campaign.kpiType === 'ROI' && campaignBenchmarks && context
+                                                            ? diagnoseAllScenarios(
+                                                                {
+                                                                    ...metrics,
+                                                                    click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                    checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                    purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                    frequency: campaign.metrics?.frequency || 0,
+                                                                } as any,
+                                                                campaignBenchmarks,
+                                                                context
+                                                            )
+                                                            : [];
+
+                                                        if (allDiagnosticResults.length > 0) {
+                                                            // 格式化所有诊断结果为guidance字符串，每个场景一行
+                                                            guidance = allDiagnosticResults.map(result => {
+                                                                const priorityEmoji = result.priority === 1 ? '🔴' : result.priority === 2 ? '🟡' : '🟢';
+                                                                return `${priorityEmoji} ${result.scenario} - ${result.diagnosis}: ${result.action}`;
+                                                            }).join('\n');
+                                                        } else if (diagnosticResult) {
+                                                            // 兼容旧逻辑：如果没有多场景结果但有单场景结果
+                                                            const priorityEmoji = diagnosticResult.priority === 1 ? '🔴' : diagnosticResult.priority === 2 ? '🟡' : '🟢';
+                                                            guidance = `${priorityEmoji} ${diagnosticResult.scenario} - ${diagnosticResult.diagnosis}\n${diagnosticResult.action}`;
+                                                        } else {
+                                                            guidance = '✅ 表现正常';
+                                                        }
+                                                    } else {
+                                                        // 对于非ROI类型或没有benchmarks的情况，使用旧的规则引擎
+                                                        guidance = getOptimizationGuidance('Campaign', campaign.kpiType, metrics, avgMetrics);
+                                                    }
+
+                                                    // 获取所有匹配的诊断场景详情（用于详细面板显示）
+                                                    const diagnosticDetails = campaign.kpiType === 'ROI' && campaignBenchmarks && context
+                                                        ? diagnoseAllScenarios(
+                                                            {
+                                                                ...metrics,
+                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                frequency: campaign.metrics?.frequency || 0,
+                                                            } as any,
+                                                            campaignBenchmarks,
+                                                            context
+                                                        ).map(result => convertToDetailedDiagnostic(
+                                                            result,
+                                                            {
+                                                                ...metrics,
+                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                frequency: campaign.metrics?.frequency || 0,
+                                                            } as any,
+                                                            campaignBenchmarks,
+                                                            context
+                                                        ))
+                                                        : undefined;
 
                                                     return (
                                                         <React.Fragment key={campaign.id}>
@@ -685,7 +832,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             {isExpanded && (
                                                                 <tr className="bg-slate-50 border-b border-slate-200">
                                                                     <td colSpan={7} className="px-4 py-4">
-                                                                        <div className="ml-8 space-y-3 max-w-4xl">
+                                                                        <div className="space-y-3 w-full">
                                                                             <GuidanceDetailPanel
                                                                                 guidance={guidance}
                                                                                 metrics={metrics}
@@ -694,6 +841,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                                 intermediateMetrics={campaign.metrics}
                                                                                 intermediateAvgMetrics={campaign.avgMetrics}
                                                                                 lastMetrics={campaign.lastMetrics}
+                                                                                diagnosticDetails={diagnosticDetails}
                                                                             />
                                                                         </div>
                                                                     </td>
@@ -827,7 +975,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             {isExpanded && (
                                                                 <tr className="bg-slate-50 border-b border-slate-200">
                                                                     <td colSpan={8} className="px-4 py-4">
-                                                                        <div className="ml-8 space-y-3 max-w-4xl">
+                                                                        <div className="space-y-3 w-full">
                                                                             <GuidanceDetailPanel
                                                                                 guidance={guidance}
                                                                                 metrics={metrics}
@@ -876,7 +1024,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filteredBlResult.ads.map(ad => {
+                                                {filteredBlResult.ads.map((ad, adIndex) => {
                                                     const isExpanded = blExpandedGuidance.has(ad.id);
 
                                                     const metrics: CampaignMetrics = {
@@ -916,7 +1064,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                     const guidance = getOptimizationGuidance('Ad', ad.kpiType, metrics, avgMetrics);
 
                                                     return (
-                                                        <React.Fragment key={ad.id}>
+                                                        <React.Fragment key={`${ad.campaignName}-${ad.adSetName}-${ad.adName}-${adIndex}`}>
                                                             <tr className="border-b hover:bg-slate-50 transition-all">
                                                                 <td className="px-4 py-3 font-medium text-slate-900">{ad.adName}</td>
                                                                 <td className="px-4 py-3 text-slate-600">{ad.adSetName}</td>
@@ -971,7 +1119,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             {isExpanded && (
                                                                 <tr className="bg-slate-50 border-b border-slate-200">
                                                                     <td colSpan={9} className="px-4 py-4">
-                                                                        <div className="ml-8 space-y-3 max-w-4xl">
+                                                                        <div className="space-y-3 w-full">
                                                                             <GuidanceDetailPanel
                                                                                 guidance={guidance}
                                                                                 metrics={metrics}

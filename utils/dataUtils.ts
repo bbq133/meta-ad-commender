@@ -10,6 +10,7 @@ export const calculateMetrics = (records: RawAdRecord[]): AggregatedMetrics => {
         purchase_value: acc.purchase_value + (curr.purchase_value || 0),
         adds_to_cart: acc.adds_to_cart + (curr.adds_to_cart || 0),
         checkouts_initiated: acc.checkouts_initiated + (curr.checkouts_initiated || 0),
+        landing_page_views: acc.landing_page_views + (curr.landing_page_views || 0),
     }), {
         spend: 0,
         impressions: 0,
@@ -17,10 +18,17 @@ export const calculateMetrics = (records: RawAdRecord[]): AggregatedMetrics => {
         purchases: 0,
         purchase_value: 0,
         adds_to_cart: 0,
-        checkouts_initiated: 0
+        checkouts_initiated: 0,
+        landing_page_views: 0,
     });
 
-    const { spend, impressions, link_clicks, purchases, purchase_value, adds_to_cart } = totals;
+    const { spend, impressions, link_clicks, purchases, purchase_value, adds_to_cart, checkouts_initiated, landing_page_views } = totals;
+
+    // 计算reach总和
+    const totalReach = records.reduce((sum, r) => sum + (r.reach || 0), 0);
+
+    // 计算频次（Frequency）- 总曝光数 ÷ 总触达人数
+    const calculatedFrequency = totalReach > 0 ? impressions / totalReach : 0;
 
     return {
         ...totals,
@@ -34,6 +42,11 @@ export const calculateMetrics = (records: RawAdRecord[]): AggregatedMetrics => {
         acos: purchase_value > 0 ? (spend / purchase_value) * 100 : 0,
         cvr: link_clicks > 0 ? purchases / link_clicks : 0,
         aov: purchases > 0 ? purchase_value / purchases : 0,
+        // 新增中间转化指标
+        click_to_pv_rate: link_clicks > 0 ? landing_page_views / link_clicks : 0,
+        checkout_rate: adds_to_cart > 0 ? checkouts_initiated / adds_to_cart : 0,
+        purchase_rate: checkouts_initiated > 0 ? purchases / checkouts_initiated : 0,
+        frequency: calculatedFrequency,
     };
 };
 
@@ -42,7 +55,7 @@ export const matchesConfig = (record: RawAdRecord, config: AdConfiguration): boo
     if (config.rules.length === 0) return true;
 
     const logic = config.rulesLogic || 'AND';  // 默认AND逻辑（向后兼容）
-    
+
     const checkRule = (rule: import('../types').FilterRule) => {
         const fieldValue = String(record[rule.field] || '').toLowerCase();
         const targetValue = rule.value.toLowerCase();
@@ -68,7 +81,7 @@ export const matchesConfig = (record: RawAdRecord, config: AdConfiguration): boo
 const matchesLayerRule = (record: RawAdRecord, rule: import('../types').LayerFilterRule): boolean => {
     const fieldValue = String(record[rule.field] || '').toLowerCase();
     const targetValue = rule.value.toLowerCase();
-    
+
     switch (rule.operator) {
         case 'contains': return fieldValue.includes(targetValue);
         case 'not_contains': return !fieldValue.includes(targetValue);
@@ -79,12 +92,12 @@ const matchesLayerRule = (record: RawAdRecord, rule: import('../types').LayerFil
 
 // 匹配层级规则组（支持AND/OR逻辑）
 const matchesLayerRules = (
-    record: RawAdRecord, 
-    rules: import('../types').LayerFilterRule[], 
+    record: RawAdRecord,
+    rules: import('../types').LayerFilterRule[],
     logic: 'AND' | 'OR'
 ): boolean => {
     if (rules.length === 0) return false;
-    
+
     if (logic === 'AND') {
         // AND逻辑：所有规则都必须匹配
         return rules.every(rule => matchesLayerRule(record, rule));
@@ -104,23 +117,23 @@ export const classifyCampaign = (record: RawAdRecord, config?: import('../types'
         if (upperName.includes('-CV-')) return CampaignLayer.CONVERSION;
         return CampaignLayer.CONVERSION;
     }
-    
+
     // 使用配置进行分类
     // 检查 Awareness
     if (matchesLayerRules(record, config.awareness.rules, config.awareness.logic)) {
         return CampaignLayer.AWARENESS;
     }
-    
+
     // 检查 Traffic
     if (matchesLayerRules(record, config.traffic.rules, config.traffic.logic)) {
         return CampaignLayer.TRAFFIC;
     }
-    
+
     // 检查 Conversion
     if (matchesLayerRules(record, config.conversion.rules, config.conversion.logic)) {
         return CampaignLayer.CONVERSION;
     }
-    
+
     // 默认归类为 Conversion
     return CampaignLayer.CONVERSION;
 };

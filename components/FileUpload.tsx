@@ -36,6 +36,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
                     purchase_value: parseFloat(row['Purchases conversion value'] || row['purchase_value'] || 0),
                     adds_to_cart: parseInt(row['Adds to cart'] || row['adds_to_cart'] || 0),
                     checkouts_initiated: parseInt(row['Checkouts initiated'] || row['checkouts_initiated'] || 0),
+                    // 新增字段映射
+                    landing_page_views: parseInt(row['Website landing page views'] || row['landing_page_views'] || 0),
+                    frequency: parseFloat(row['Frequency'] || row['frequency'] || 0),
+                    reach: parseInt(row['Reach'] || row['reach'] || 0),
                 }));
 
             if (mappedData.length === 0) {
