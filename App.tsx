@@ -223,7 +223,7 @@ function App() {
                                     onChange={(e) => setCompareMode(e.target.checked)}
                                     className="rounded"
                                 />
-                                <span className="text-sm text-slate-700">对比模式</span>
+                                <span className="text-sm text-slate-700">compare</span>
                             </label>
 
                             {/* Business Lines Config */}
