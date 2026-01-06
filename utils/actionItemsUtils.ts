@@ -1,5 +1,6 @@
 import { RawAdRecord, AdConfiguration } from '../types';
 import { QuadrantThresholds } from './quadrantUtils';
+import { calculateBenchmarkROI, calculatePriority } from './priorityUtils';
 
 // Action Item 类型定义
 
@@ -39,6 +40,7 @@ export interface ActionCampaign {
     avgValue: number;
     lastValue?: number;
     quadrant: string;
+    priority?: 'P0' | 'P1' | null;  // 优先级字段
 
     // 中间指标
     metrics?: IntermediateMetrics;
@@ -263,6 +265,31 @@ export const generateActionItems = (
         // 计算该业务线的平均 KPI
         const avgKPI = calculateKPI(matchingData, kpiType);
 
+        // 计算该业务线的 Benchmark ROI (用于优先级计算)
+        // Benchmark = Total Revenue / Total Spend (加权平均)
+        let benchmarkROI: number | null = null;
+        if (kpiType === 'ROI') {
+            // 收集所有 Campaign 的 revenue 和 spend 数据
+            const campaignDataForBenchmark: Array<{ revenue: number; spend: number }> = [];
+            const tempCampaignMapForBenchmark = new Map<string, { revenue: number; spend: number }>();
+
+            matchingData.forEach(r => {
+                const campaignKey = r.campaign_name;
+                if (!tempCampaignMapForBenchmark.has(campaignKey)) {
+                    tempCampaignMapForBenchmark.set(campaignKey, { revenue: 0, spend: 0 });
+                }
+                const current = tempCampaignMapForBenchmark.get(campaignKey)!;
+                current.revenue += r.purchase_value;
+                current.spend += r.spend;
+            });
+
+            tempCampaignMapForBenchmark.forEach(data => {
+                campaignDataForBenchmark.push(data);
+            });
+
+            benchmarkROI = calculateBenchmarkROI(campaignDataForBenchmark);
+        }
+
         // 计算该业务线的平均中间指标
         const avgMetrics = calculateMetrics(matchingData);
 
@@ -329,6 +356,11 @@ export const generateActionItems = (
 
             // 只处理「观察区」和「问题区」的 Campaign
             if (quadrant === 'watch' || quadrant === 'problem') {
+                // 计算优先级（仅针对 ROI 类型）
+                const priority = benchmarkROI !== null
+                    ? calculatePriority(campaignKPI, benchmarkROI, kpiType)
+                    : null;
+
                 // 添加到 Campaign 列表
                 campaigns.push({
                     id: `campaign-${campaignName}-${businessLineId}`,
@@ -345,6 +377,7 @@ export const generateActionItems = (
                     avgValue: avgKPI,
                     lastValue: campaignLastValue,
                     quadrant,
+                    priority,  // 添加优先级字段
                     // 中间指标
                     metrics: campaignMetrics,
                     avgMetrics: avgMetrics,
@@ -510,9 +543,10 @@ export const exportActionItemsToCSV = (result: ActionItemsResult): string => {
 
     // Campaign Sheet
     lines.push('=== 需要调整的 Campaign ===');
-    lines.push('Campaign Name,业务线,Spend,KPI,Target,Actual,Gap%');
+    lines.push('Campaign Name,业务线,Spend,KPI,Target,Actual,Gap%,Priority');
     result.campaigns.forEach(c => {
-        lines.push(`"${c.campaignName}","${c.businessLine}",${c.spend.toFixed(2)},${c.kpiType},${c.targetValue},${c.actualValue.toFixed(2)},${c.gapPercentage.toFixed(1)}%`);
+        const priorityText = c.priority || '-';
+        lines.push(`"${c.campaignName}","${c.businessLine}",${c.spend.toFixed(2)},${c.kpiType},${c.targetValue},${c.actualValue.toFixed(2)},${c.gapPercentage.toFixed(1)}%,${priorityText}`);
     });
 
     lines.push('');

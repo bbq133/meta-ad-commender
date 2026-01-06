@@ -259,9 +259,18 @@ const VsAvgCell: React.FC<{
 
     return (
         <span className="text-sm font-bold text-red-600">
-            {sign}{vsAvgPercentage.toFixed(1)}% {arrow}
         </span>
     );
+};
+
+// 排序图标组件
+const SortIcon: React.FC<{ active: boolean; direction: 'asc' | 'desc' }> = ({ active, direction }) => {
+    if (!active) {
+        return <span className="text-slate-400 text-xs ml-1">⇅</span>;
+    }
+    return direction === 'asc' ?
+        <span className="text-indigo-600 text-xs ml-1">▲</span> :
+        <span className="text-indigo-600 text-xs ml-1">▼</span>;
 };
 
 // KPI 类型标签
@@ -306,6 +315,20 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
 
     // 调优指导展开状态
     const [blExpandedGuidance, setBlExpandedGuidance] = useState<Set<string>>(new Set());
+
+    // 排序状态 - Business Line
+    const [campaignSort, setCampaignSort] = useState<{ field: 'spend' | 'kpi'; direction: 'asc' | 'desc' }>({
+        field: 'spend',
+        direction: 'desc'
+    });
+    const [adSetSort, setAdSetSort] = useState<{ field: 'spend' | 'kpi'; direction: 'asc' | 'desc' }>({
+        field: 'spend',
+        direction: 'desc'
+    });
+    const [adSort, setAdSort] = useState<{ field: 'spend' | 'kpi'; direction: 'asc' | 'desc' }>({
+        field: 'spend',
+        direction: 'desc'
+    });
 
     // 过滤已删除的项目 - Business Line
     const filteredBlResult = useMemo(() => {
@@ -426,6 +449,59 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
 
         return calculateBenchmarks(campaignsWithMetrics);
     }, [filteredBlResult]);
+
+    // 排序处理函数
+    const handleCampaignSort = (field: 'spend' | 'kpi') => {
+        setCampaignSort(prev => ({
+            field,
+            direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    const handleAdSetSort = (field: 'spend' | 'kpi') => {
+        setAdSetSort(prev => ({
+            field,
+            direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    const handleAdSort = (field: 'spend' | 'kpi') => {
+        setAdSort(prev => ({
+            field,
+            direction: prev.field === field && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    };
+
+    // 排序后的数据
+    const sortedCampaigns = useMemo(() => {
+        if (!filteredBlResult) return [];
+        const items = [...filteredBlResult.campaigns];
+        return items.sort((a, b) => {
+            const aValue = campaignSort.field === 'spend' ? a.spend : a.actualValue;
+            const bValue = campaignSort.field === 'spend' ? b.spend : b.actualValue;
+            return campaignSort.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        });
+    }, [filteredBlResult, campaignSort]);
+
+    const sortedAdSets = useMemo(() => {
+        if (!filteredBlResult) return [];
+        const items = [...filteredBlResult.adSets];
+        return items.sort((a, b) => {
+            const aValue = adSetSort.field === 'spend' ? a.spend : a.actualValue;
+            const bValue = adSetSort.field === 'spend' ? b.spend : b.actualValue;
+            return adSetSort.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        });
+    }, [filteredBlResult, adSetSort]);
+
+    const sortedAds = useMemo(() => {
+        if (!filteredBlResult) return [];
+        const items = [...filteredBlResult.ads];
+        return items.sort((a, b) => {
+            const aValue = adSort.field === 'spend' ? a.spend : a.actualValue;
+            const bValue = adSort.field === 'spend' ? b.spend : b.actualValue;
+            return adSort.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        });
+    }, [filteredBlResult, adSort]);
 
     // 生成 Action Items
     const handleGenerate = () => {
@@ -573,6 +649,13 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                         <li>• 需调整 Campaign：位于「观察区」或「问题区」的 Campaign（基于 Business Line 中调整的阈值）</li>
                                         <li>• 需调整人群：上述 Campaign 中，KPI 值低于业务线平均值的 Ad Set</li>
                                         <li>• 需调整素材：上述 Campaign 中，KPI 值低于业务线平均值的 Ad</li>
+                                        <li>• 优先级判定（仅 ROI 类型）：
+                                            <ul className="ml-4 mt-0.5 space-y-0.5">
+                                                <li>- Benchmark = 业务线总收入 ÷ 业务线总支出</li>
+                                                <li>- 🔴 P0：ROI \u003c Benchmark × 80%（低于基准 20% 以上）</li>
+                                                <li>- 🟡 P1：Benchmark × 80% ≤ ROI \u003c Benchmark（低于基准 0-20%）</li>
+                                            </ul>
+                                        </li>
                                         <li>• 数据范围：{dateRange.start} - {dateRange.end}</li>
                                     </ul>
                                 </div>
@@ -624,15 +707,38 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                 <tr>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign Name</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Spend</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleCampaignSort('spend')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            Spend
+                                                            <SortIcon
+                                                                active={campaignSort.field === 'spend'}
+                                                                direction={campaignSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI 值</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleCampaignSort('kpi')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            KPI 值
+                                                            <SortIcon
+                                                                active={campaignSort.field === 'kpi'}
+                                                                direction={campaignSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
+                                                    <th className="px-4 py-3 text-center text-xs font-black text-slate-700 uppercase w-20">优先级</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filteredBlResult.campaigns.map(campaign => {
+                                                {sortedCampaigns.map(campaign => {
                                                     const isExpanded = blExpandedGuidance.has(campaign.id);
 
                                                     const metrics: CampaignMetrics = {
@@ -805,6 +911,18 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                     />
                                                                 </td>
 
+                                                                <td className="px-4 py-3 text-center">
+                                                                    {campaign.priority === 'P0' && (
+                                                                        <span className="text-red-600 font-bold text-sm">🔴 P0</span>
+                                                                    )}
+                                                                    {campaign.priority === 'P1' && (
+                                                                        <span className="text-amber-600 font-bold text-sm">🟡 P1</span>
+                                                                    )}
+                                                                    {!campaign.priority && (
+                                                                        <span className="text-gray-400 text-sm">-</span>
+                                                                    )}
+                                                                </td>
+
                                                                 <td className="px-4 py-3">
                                                                     <button
                                                                         onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, campaign.id)}
@@ -831,7 +949,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
 
                                                             {isExpanded && (
                                                                 <tr className="bg-slate-50 border-b border-slate-200">
-                                                                    <td colSpan={7} className="px-4 py-4">
+                                                                    <td colSpan={8} className="px-4 py-4">
                                                                         <div className="space-y-3 w-full">
                                                                             <GuidanceDetailPanel
                                                                                 guidance={guidance}
@@ -873,15 +991,37 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">AdSet Name</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Spend</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleAdSetSort('spend')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            Spend
+                                                            <SortIcon
+                                                                active={adSetSort.field === 'spend'}
+                                                                direction={adSetSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI 值</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleAdSetSort('kpi')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            KPI 值
+                                                            <SortIcon
+                                                                active={adSetSort.field === 'kpi'}
+                                                                direction={adSetSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filteredBlResult.adSets.map(adSet => {
+                                                {sortedAdSets.map(adSet => {
                                                     const isExpanded = blExpandedGuidance.has(adSet.id);
 
                                                     const metrics: CampaignMetrics = {
@@ -1016,15 +1156,37 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">AdSet</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Spend</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleAdSort('spend')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            Spend
+                                                            <SortIcon
+                                                                active={adSort.field === 'spend'}
+                                                                direction={adSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI 值</th>
+                                                    <th
+                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                        onClick={() => handleAdSort('kpi')}
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            KPI 值
+                                                            <SortIcon
+                                                                active={adSort.field === 'kpi'}
+                                                                direction={adSort.direction}
+                                                            />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filteredBlResult.ads.map((ad, adIndex) => {
+                                                {sortedAds.map((ad, adIndex) => {
                                                     const isExpanded = blExpandedGuidance.has(ad.id);
 
                                                     const metrics: CampaignMetrics = {
