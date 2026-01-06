@@ -2,14 +2,18 @@
 .diagnostic-flow-panel {
     margin-top: 20px;
     margin-bottom: 20px;
-    margin-left: 0;  /* 不使用负边距 */
-    margin-right: 0;  /* 不使用负边距 */
-    padding: 20px 0;  /* 左右不加padding，由父容器控制 */
+    margin-left: 0;
+    /* 不使用负边距 */
+    margin-right: 0;
+    /* 不使用负边距 */
+    padding: 20px 0;
+    /* 左右不加padding，由父容器控制 */
     background: #f8f9fa;
     border-radius: 8px;
     border: 1px solid #e0e0e0;
     box-sizing: border-box;
-    width: 100%;  /* 使用容器宽度 */
+    width: 100%;
+    /* 使用容器宽度 */
 }
 
 .flow-header {
@@ -39,7 +43,8 @@
     width: 100%;
     max-width: 100%;
     margin: 0;
-    justify-content: flex-end; /* 右对齐 */
+    justify-content: flex-end;
+    /* 右对齐 */
     overflow: visible;
 }
 
@@ -50,15 +55,19 @@
     padding: 16px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     position: relative;
-    flex: 1; /* 平均分配宽度 */
-    min-width: 120px; /* 确保最小宽度 */
-    max-width: none;;
+    flex: 1;
+    /* 平均分配宽度 */
+    min-width: 120px;
+    /* 确保最小宽度 */
+    max-width: none;
+    ;
     flex-direction: column;
     gap: 4px;
     margin-bottom: 8px;
     padding-bottom: 6px;
     border-bottom: 2px solid #e0e0e0;
-    min-height: 60px; /* 确保所有步骤头部高度一致，实现对齐 */
+    min-height: 60px;
+    /* 确保所有步骤头部高度一致，实现对齐 */
 }
 
 .step-icon {
@@ -80,7 +89,8 @@
     font-weight: 600;
     color: #333;
     line-height: 1.3;
-    min-height: 36px; /* 确保名称区域高度一致 */
+    min-height: 36px;
+    /* 确保名称区域高度一致 */
     display: flex;
     align-items: center;
 }
@@ -107,9 +117,11 @@
 
 .condition-values {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     font-size: 11px;
+    flex-wrap: nowrap;
 }
 
 .value-pass {
@@ -190,9 +202,11 @@
 
 .diagnosis-values {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
     font-size: 11px;
+    flex-wrap: nowrap;
 }
 
 .value-label {
@@ -256,7 +270,8 @@
 /* 步骤连接线 - 横向 */
 /* 步骤连接线已由gap替代，保留用于响应式 */
 .step-connector {
-    display: none; /* 使用gap代替连接线 */
+    display: none;
+    /* 使用gap代替连接线 */
 }
 
 /* 不同步骤类型的边框色 */
@@ -320,7 +335,8 @@
 .sub-problems-list {
     display: flex;
     flex-direction: column;
-    gap: 20px; /* 增加卡片间距 */
+    gap: 20px;
+    /* 增加卡片间距 */
 }
 
 .sub-problem-item {
@@ -369,17 +385,21 @@
 /* 响应式设计 */
 @media (max-width: 768px) {
     .diagnostic-flow-panel {
-    margin-top: 20px;
-    margin-bottom: 20px;
-    margin-left: 0;  /* 不使用负边距 */
-    margin-right: 0;  /* 不使用负边距 */
-    padding: 20px 0;  /* 左右不加padding，由父容器控制 */
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-    box-sizing: border-box;
-    width: 100%;  /* 使用容器宽度 */
-}
+        margin-top: 20px;
+        margin-bottom: 20px;
+        margin-left: 0;
+        /* 不使用负边距 */
+        margin-right: 0;
+        /* 不使用负边距 */
+        padding: 20px 0;
+        /* 左右不加padding，由父容器控制 */
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        box-sizing: border-box;
+        width: 100%;
+        /* 使用容器宽度 */
+    }
 
     .diagnostic-flow {
         flex-direction: column;
@@ -418,6 +438,7 @@
 .sub-problem-item {
     animation: fadeIn 0.4s ease-out;
 }
+
 /* 确保步骤0可见 */
 .step-prerequisite {
     min-width: 180px !important;
