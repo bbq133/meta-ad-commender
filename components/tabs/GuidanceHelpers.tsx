@@ -68,7 +68,9 @@ export const GuidanceDetailPanel: React.FC<{
     intermediateAvgMetrics?: any;
     lastMetrics?: any;
     diagnosticDetails?: DiagnosticDetail[];  // 修改：支持多个诊断详情
-}> = ({ guidance, metrics, avgMetrics, kpiType, intermediateMetrics, intermediateAvgMetrics, lastMetrics, diagnosticDetails }) => {
+    priority?: 'P0' | 'P1' | null;  // 新增：优先级
+    benchmarkROI?: number;  // 新增：Benchmark ROI
+}> = ({ guidance, metrics, avgMetrics, kpiType, intermediateMetrics, intermediateAvgMetrics, lastMetrics, diagnosticDetails, priority, benchmarkROI }) => {
     const [showDiagnosticFlow, setShowDiagnosticFlow] = useState(false);
     const [activeScenarioIndex, setActiveScenarioIndex] = useState(0);
     const conditions = getTriggeredConditions(metrics as CampaignMetrics, avgMetrics as CampaignMetrics, kpiType);
@@ -222,12 +224,33 @@ export const GuidanceDetailPanel: React.FC<{
                             </div>
                         </div>
                     </div>
+
+                    {/* 优先级横条 - 仅在有优先级且为 ROI 类型时显示 */}
+                    {priority && kpiType === 'ROI' && (
+                        <div className={`mt-3 px-4 py-2 rounded-md flex items-center gap-3 ${priority === 'P0'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-amber-100 text-amber-800'
+                            }`}>
+                            <span className="font-bold text-sm whitespace-nowrap">
+                                {priority === 'P0' ? '🔴 P0' : '🟡 P1'}
+                            </span>
+                            <span className="text-xs">
+                                {priority === 'P0'
+                                    ? 'ROI < Benchmark × 80%（低于基准 20% 以上），先立刻下调 20% 预算'
+                                    : 'Benchmark × 80% ≤ ROI ≤ Benchmark（低于基准 0-20%），进入下一步诊断和优化，预算保持观察'
+                                }
+                            </span>
+                        </div>
+                    )}
                 </div>
             )}
 
             {/* 第4行：不合格指标 */}
-            <div className="mb-3">
-                <div className="text-sm font-medium text-slate-700 mb-2">不合格指标</div>
+            <div className="border-l-4 border-red-500 pl-3 py-2 bg-red-50 rounded-r-lg mb-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-red-700 mb-2">
+                    <span>🔴</span>
+                    <span>不合格指标</span>
+                </div>
                 <div className="text-sm leading-relaxed space-x-2 flex flex-wrap items-center gap-y-1">
                     {/* 优先级 */}
                     <span className="inline-flex items-center gap-1">
@@ -255,8 +278,11 @@ export const GuidanceDetailPanel: React.FC<{
             </div>
 
             {/* 第5行：调优建议 */}
-            <div>
-                <div className="text-sm font-medium text-slate-700 mb-2">调优建议</div>
+            <div className="border-l-4 border-blue-500 pl-3 py-2 bg-blue-50 rounded-r-lg">
+                <div className="flex items-center gap-2 text-sm font-bold text-blue-700 mb-2">
+                    <span>💡</span>
+                    <span>调优建议</span>
+                </div>
                 <div className="text-sm leading-relaxed">
                     <span className="font-medium text-slate-900 whitespace-pre-line">{guidance}</span>
                 </div>

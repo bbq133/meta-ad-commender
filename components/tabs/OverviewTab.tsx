@@ -207,8 +207,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ data, comparisonData, 
                                     <>
                                         <div>
                                             <div className="text-xs text-slate-600 mb-1">Impressions</div>
-                                            <div className="text-xl font-bold text-slate-900">
-                                                {formatNumber(metrics.impressions)}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xl font-bold text-slate-900">
+                                                    {formatNumber(metrics.impressions)}
+                                                </div>
+                                                {prevMetrics.impressions > 0 && (
+                                                    <div className={`text-sm font-bold ${getDelta(metrics.impressions, prevMetrics.impressions) > 0
+                                                        ? 'text-emerald-500'
+                                                        : 'text-red-500'
+                                                        }`}>
+                                                        {getDelta(metrics.impressions, prevMetrics.impressions) > 0 ? '+' : ''}
+                                                        {(getDelta(metrics.impressions, prevMetrics.impressions) * 100).toFixed(1)}%
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <div>
@@ -230,8 +241,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ data, comparisonData, 
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-600 mb-1">Spend</div>
-                                            <div className="text-lg font-bold text-slate-900">
-                                                {formatCurrency(metrics.spend)}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xl font-bold text-slate-900">
+                                                    {formatCurrency(metrics.spend)}
+                                                </div>
+                                                {prevMetrics.spend > 0 && (
+                                                    <div className={`text-sm font-bold ${getDelta(metrics.spend, prevMetrics.spend) > 0
+                                                        ? 'text-emerald-500'
+                                                        : 'text-red-500'
+                                                        }`}>
+                                                        {getDelta(metrics.spend, prevMetrics.spend) > 0 ? '+' : ''}
+                                                        {(getDelta(metrics.spend, prevMetrics.spend) * 100).toFixed(1)}%
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </>
@@ -275,8 +297,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ data, comparisonData, 
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-600 mb-1">Clicks</div>
-                                            <div className="text-lg font-bold text-slate-900">
-                                                {formatNumber(metrics.link_clicks)}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xl font-bold text-slate-900">
+                                                    {formatNumber(metrics.link_clicks)}
+                                                </div>
+                                                {prevMetrics.link_clicks > 0 && (
+                                                    <div className={`text-sm font-bold ${getDelta(metrics.link_clicks, prevMetrics.link_clicks) > 0
+                                                        ? 'text-emerald-500'
+                                                        : 'text-red-500'
+                                                        }`}>
+                                                        {getDelta(metrics.link_clicks, prevMetrics.link_clicks) > 0 ? '+' : ''}
+                                                        {(getDelta(metrics.link_clicks, prevMetrics.link_clicks) * 100).toFixed(1)}%
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </>
@@ -304,14 +337,36 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ data, comparisonData, 
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-600 mb-1">Revenue</div>
-                                            <div className="text-lg font-bold text-slate-900">
-                                                {formatCurrency(metrics.purchase_value)}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xl font-bold text-slate-900">
+                                                    {formatCurrency(metrics.purchase_value)}
+                                                </div>
+                                                {prevMetrics.purchase_value > 0 && (
+                                                    <div className={`text-sm font-bold ${getDelta(metrics.purchase_value, prevMetrics.purchase_value) > 0
+                                                        ? 'text-emerald-500'
+                                                        : 'text-red-500'
+                                                        }`}>
+                                                        {getDelta(metrics.purchase_value, prevMetrics.purchase_value) > 0 ? '+' : ''}
+                                                        {(getDelta(metrics.purchase_value, prevMetrics.purchase_value) * 100).toFixed(1)}%
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-slate-600 mb-1">Spend</div>
-                                            <div className="text-lg font-bold text-slate-900">
-                                                {formatCurrency(metrics.spend)}
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-xl font-bold text-slate-900">
+                                                    {formatCurrency(metrics.spend)}
+                                                </div>
+                                                {prevMetrics.spend > 0 && (
+                                                    <div className={`text-sm font-bold ${getDelta(metrics.spend, prevMetrics.spend) > 0
+                                                        ? 'text-emerald-500'
+                                                        : 'text-red-500'
+                                                        }`}>
+                                                        {getDelta(metrics.spend, prevMetrics.spend) > 0 ? '+' : ''}
+                                                        {(getDelta(metrics.spend, prevMetrics.spend) * 100).toFixed(1)}%
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </>

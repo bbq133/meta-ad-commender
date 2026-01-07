@@ -651,8 +651,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                         <li>• 需调整素材：上述 Campaign 中，KPI 值低于业务线平均值的 Ad</li>
                                         <li>• 优先级判定（仅 ROI 类型）：
                                             <ul className="ml-4 mt-0.5 space-y-0.5">
-                                                <li>- 🔴 P0：ROI \u003c Benchmark × 80%（低于基准 20% 以上）</li>
-                                                <li>- 🟡 P1：Benchmark × 80% ≤ ROI \u003c Benchmark（低于基准 0-20%）</li>
+                                                <li>- 🔴 P0：ROI \u003c Benchmark × 80%（低于基准 20% 以上），先立刻下调 20% 预算</li>
+                                                <li>- 🟡 P1：Benchmark × 80% ≤ ROI ≤ Benchmark（低于基准 0-20%），进入下一步诊断和优化，预算保持观察</li>
                                             </ul>
                                         </li>
                                         <li>• 数据范围：{dateRange.start} - {dateRange.end}</li>
@@ -959,6 +959,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                                 intermediateAvgMetrics={campaign.avgMetrics}
                                                                                 lastMetrics={campaign.lastMetrics}
                                                                                 diagnosticDetails={diagnosticDetails}
+                                                                                priority={campaign.priority}
+                                                                                benchmarkROI={campaign.avgValue}
                                                                             />
                                                                         </div>
                                                                     </td>
