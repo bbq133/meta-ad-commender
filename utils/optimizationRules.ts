@@ -34,6 +34,13 @@ export interface CampaignMetrics {
     impressions?: number;
     frequency?: number;
     clicks?: number;
+    // 原始数据字段用于公式计算
+    link_clicks?: number;
+    landing_page_views?: number;
+    purchases?: number;
+    adds_to_cart?: number;
+    checkouts_initiated?: number;
+    purchase_value?: number;
 }
 
 // ==================== 规则库 ====================

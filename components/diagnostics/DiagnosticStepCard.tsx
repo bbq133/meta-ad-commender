@@ -17,10 +17,16 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
         if (stepNumber === 2) return 'step-drilldown';
         if (stepNumber === 3) return 'step-formula';       // 公式
         if (stepNumber === 4) return 'step-judgment';      // 判定条件
-        if (stepNumber === 5) return 'step-attribution';   // 归因诊断
-        if (stepNumber === 6) return 'step-action';        // Action建议
-        if (stepNumber === 4) return 'step-attribution';
-        if (stepNumber === 5) return 'step-action';
+        if (stepNumber === 5) return 'step-trend';         // V2: 趋势逻辑
+        if (stepNumber === 6) {
+            // V2: 趋势决策 - 根据趋势状态变色
+            const trend = content.trend;
+            if (trend === 'improving') return 'step-decision-improving';
+            if (trend === 'declining') return 'step-decision-declining';
+            if (trend === 'stable') return 'step-decision-stable';
+            return 'step-decision-stable';
+        }
+        if (stepNumber === 7) return 'step-action';        // Action建议
         return '';
     };
 
@@ -39,7 +45,7 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
 
         return (
             <div className="condition-block">
-                <div className="condition-formula">{content.condition}</div>
+                <div className="condition-formula" style={{ whiteSpace: 'pre-line' }}>{content.condition}</div>
                 {content.actualValue !== undefined && content.thresholdValue !== undefined && (
                     <div className="condition-values">
                         <span className={content.result ? 'value-pass' : 'value-fail'}>
@@ -63,17 +69,17 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
         return (
             <div className="formula-block">
                 {content.metric && (
-                    <div className="metric-name">
+                    <div className="metric-name" style={{ whiteSpace: 'pre-line' }}>
                         <strong>{content.metric}</strong>
                     </div>
                 )}
                 {content.formula && (
-                    <div className="formula-text">
+                    <div className="formula-text" style={{ whiteSpace: 'pre-line' }}>
                         公式: <code>{content.formula}</code>
                     </div>
                 )}
                 {content.calculation && (
-                    <div className="calculation-text">
+                    <div className="calculation-text" style={{ whiteSpace: 'pre-line' }}>
                         计算: <code>{content.calculation}</code>
                     </div>
                 )}
@@ -83,7 +89,8 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
 
     // 渲染诊断结论
     const renderDiagnosis = () => {
-        if (!content.diagnosis) return null;
+        // V2: 跳过步骤6，因为它有专门的renderTrendDecision
+        if (!content.diagnosis || stepNumber === 6) return null;
 
         return (
             <div className="diagnosis-block">
@@ -98,6 +105,58 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
                         <span className="value-separator">|</span>
                         <span className="value-label">基准:</span>
                         <span className="value-benchmark">${formatValue(content.thresholdValue)}</span>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // V2 新增：渲染趋势逻辑（步骤5）
+    const renderTrendLogic = () => {
+        if (stepNumber !== 5 || !content.l3dValue || !content.l7dValue) return null;
+
+        const getTrendStatusClass = () => {
+            if (content.trend === 'improving') return 'improving';
+            if (content.trend === 'declining') return 'declining';
+            return 'stable';
+        };
+
+        return (
+            <div className="formula-block">
+                <div className="formula-text">
+                    公式: <code>{content.formula}</code>
+                </div>
+                <div className="trend-values">
+                    <span>L3D: {content.l3dValue.toFixed(2)}</span>
+                    <span>L7D: {content.l7dValue.toFixed(2)}</span>
+                </div>
+                {content.description && (
+                    <div className={`trend-status ${getTrendStatusClass()}`}>
+                        {content.description}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // V2 新增：渲染趋势决策（步骤6）
+    const renderTrendDecision = () => {
+        if (stepNumber !== 6) return null;
+
+        const getTrendStatusClass = () => {
+            if (content.trend === 'improving') return 'improving';
+            if (content.trend === 'declining') return 'declining';
+            return 'stable';
+        };
+
+        return (
+            <div className="diagnosis-block">
+                <div className={`trend-status ${getTrendStatusClass()}`}>
+                    {content.diagnosis}
+                </div>
+                {content.isRecoveryCase2 && content.recoveryMessage && (
+                    <div className="recovery-message">
+                        {content.recoveryMessage}
                     </div>
                 )}
             </div>
@@ -133,6 +192,8 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
                 {renderCondition()}
                 {renderFormula()}
                 {renderDiagnosis()}
+                {renderTrendLogic()}
+                {renderTrendDecision()}
                 {renderActions()}
             </div>
             {!isLast && <div className="step-connector"></div>}

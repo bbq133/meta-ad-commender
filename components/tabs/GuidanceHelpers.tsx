@@ -252,10 +252,7 @@ export const GuidanceDetailPanel: React.FC<{
                     <span>不合格指标</span>
                 </div>
                 <div className="text-sm leading-relaxed space-x-2 flex flex-wrap items-center gap-y-1">
-                    {/* 优先级 */}
-                    <span className="inline-flex items-center gap-1">
-                        {getPriorityBadge(guidance)}
-                    </span>
+                    {/* 优先级 - 已移除 */}
 
                     {/* 触发条件 */}
                     {conditions.length > 0 && (

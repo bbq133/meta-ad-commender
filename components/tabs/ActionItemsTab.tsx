@@ -15,10 +15,11 @@ import { LevelToggle } from '../filters/LevelToggle';
 import { SearchInput } from '../filters/SearchInput';
 import { MultiSelect } from '../filters/MultiSelect';
 import { getOptimizationGuidance, getTriggeredConditions, getPriorityLevel, CampaignMetrics } from '../../utils/optimizationRules';
-import { toggleGuidance, getPriorityIcon, getPriorityBadge, GuidanceDetailPanel } from './GuidanceHelpers';
+import { toggleGuidance, getPriorityBadge, GuidanceDetailPanel } from './GuidanceHelpers';
 // 新增：导入诊断引擎和Benchmark计算器
-import { diagnoseCampaign, diagnoseCampaignWithContext, DiagnosticResult, CampaignContext, convertToDetailedDiagnostic, diagnoseAllScenarios } from '../../utils/campaignDiagnostics';
+import { diagnoseCampaign, diagnoseCampaignWithContext, DiagnosticResult, CampaignContext, convertToDetailedDiagnostic, diagnoseAllScenarios, calculateTrend, TrendInfo } from '../../utils/campaignDiagnostics';
 import { calculateBenchmarks, CampaignBenchmarks } from '../../utils/benchmarkCalculator';
+import { calculateL3DL7DROI } from '../../utils/trendCalculator';
 
 interface ActionItemsTabProps {
     data: RawAdRecord[];
@@ -755,6 +756,13 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                         impressions: campaign.metrics?.impressions,
                                                         reach: campaign.metrics?.reach,
                                                         frequency: campaign.metrics?.frequency,
+                                                        // 添加原始数据字段用于公式计算
+                                                        link_clicks: campaign.metrics?.clicks || 0,
+                                                        landing_page_views: campaign.metrics?.landing_page_views || 0,
+                                                        purchases: campaign.metrics?.purchases || 0,
+                                                        adds_to_cart: campaign.metrics?.adds_to_cart || 0,
+                                                        checkouts_initiated: campaign.metrics?.checkouts_initiated || 0,
+                                                        purchase_value: campaign.metrics?.purchase_value || 0,
                                                     };
 
                                                     const avgMetrics: CampaignMetrics = {
@@ -850,7 +858,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             const priorityEmoji = diagnosticResult.priority === 1 ? '🔴' : diagnosticResult.priority === 2 ? '🟡' : '🟢';
                                                             guidance = `${priorityEmoji} ${diagnosticResult.scenario} - ${diagnosticResult.diagnosis}\n${diagnosticResult.action}`;
                                                         } else {
-                                                            guidance = '✅ 表现正常';
+                                                            // 完全没有匹配到任何诊断规则
+                                                            guidance = '⚠️ 暂无匹配的 action';
                                                         }
                                                     } else {
                                                         // 对于非ROI类型或没有benchmarks的情况，使用旧的规则引擎
@@ -858,6 +867,19 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                     }
 
                                                     // 获取所有匹配的诊断场景详情（用于详细面板显示）
+                                                    // V2 新增：计算趋势信息（使用真实L3D/L7D数据）
+                                                    let trendInfo: TrendInfo | undefined = undefined;
+                                                    if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
+                                                        // 使用真实日期过滤计算 L3D 和 L7D ROI
+                                                        const { l3dROI, l7dROI } = calculateL3DL7DROI(
+                                                            data,
+                                                            dateRange.end,
+                                                            campaign.campaignName
+                                                        );
+                                                        const benchmarkROI = campaignBenchmarks.avgRoi || 0;
+                                                        trendInfo = calculateTrend(l3dROI, l7dROI, benchmarkROI);
+                                                    }
+
                                                     const diagnosticDetails = campaign.kpiType === 'ROI' && campaignBenchmarks && context
                                                         ? diagnoseAllScenarios(
                                                             {
@@ -879,7 +901,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                 frequency: campaign.metrics?.frequency || 0,
                                                             } as any,
                                                             campaignBenchmarks,
-                                                            context
+                                                            context,
+                                                            trendInfo  // V2: 传递趋势信息
                                                         ))
                                                         : undefined;
 
@@ -927,7 +950,6 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                         onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, campaign.id)}
                                                                         className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
                                                                     >
-                                                                        {getPriorityIcon(guidance)}
                                                                         {isExpanded ? (
                                                                             <ChevronDown className="w-4 h-4 text-slate-500" />
                                                                         ) : (
@@ -1094,7 +1116,6 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                         onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, adSet.id)}
                                                                         className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
                                                                     >
-                                                                        {getPriorityIcon(guidance)}
                                                                         {isExpanded ? (
                                                                             <ChevronDown className="w-4 h-4 text-slate-500" />
                                                                         ) : (
@@ -1260,7 +1281,6 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                         onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, ad.id)}
                                                                         className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
                                                                     >
-                                                                        {getPriorityIcon(guidance)}
                                                                         {isExpanded ? (
                                                                             <ChevronDown className="w-4 h-4 text-slate-500" />
                                                                         ) : (

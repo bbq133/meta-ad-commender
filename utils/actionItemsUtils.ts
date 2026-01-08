@@ -19,6 +19,11 @@ export interface IntermediateMetrics {
     impressions?: number; // 展示次数
     clicks?: number;     // 点击次数
     purchases?: number;  // 购买次数
+    // 原始数据字段（用于诊断公式计算）
+    adds_to_cart?: number;          // 加购次数
+    checkouts_initiated?: number;   // 发起结账次数
+    landing_page_views?: number;    // 落地页浏览次数
+    purchase_value?: number;        // 购买金额
     // 新增中间转化指标
     click_to_pv_rate?: number;  // Click-to-PV Rate (小数格式)
     checkout_rate?: number;      // Checkout Rate (小数格式)
@@ -146,6 +151,11 @@ const calculateMetrics = (records: RawAdRecord[]): IntermediateMetrics => {
         impressions: totalImpressions,
         clicks: totalClicks,
         purchases: totalPurchases,
+        // 原始数据字段（用于诊断公式计算）
+        adds_to_cart: totalATC,
+        checkouts_initiated: totalCheckouts,
+        landing_page_views: totalLandingPageViews,
+        purchase_value: totalPurchaseValue,
         // 新增中间转化指标（注意：这些是小数格式，不是百分比）
         click_to_pv_rate: totalClicks > 0 ? totalLandingPageViews / totalClicks : 0,
         checkout_rate: totalATC > 0 ? totalCheckouts / totalATC : 0,
