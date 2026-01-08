@@ -130,11 +130,12 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
                     <span>L3D: {content.l3dValue.toFixed(2)}</span>
                     <span>L7D: {content.l7dValue.toFixed(2)}</span>
                 </div>
-                {content.description && (
+                {/* 隐藏趋势描述文字 */}
+                {/* {content.description && (
                     <div className={`trend-status ${getTrendStatusClass()}`}>
                         {content.description}
                     </div>
-                )}
+                )} */}
             </div>
         );
     };
@@ -151,14 +152,16 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
 
         return (
             <div className="diagnosis-block">
+                {/* 显示趋势状态 */}
                 <div className={`trend-status ${getTrendStatusClass()}`}>
                     {content.diagnosis}
                 </div>
-                {content.isRecoveryCase2 && content.recoveryMessage && (
+                {/* 隐藏回暖提示信息 */}
+                {/* {content.isRecoveryCase2 && content.recoveryMessage && (
                     <div className="recovery-message">
                         {content.recoveryMessage}
                     </div>
-                )}
+                )} */}
             </div>
         );
     };

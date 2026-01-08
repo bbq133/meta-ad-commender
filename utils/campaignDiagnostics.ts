@@ -855,18 +855,22 @@ function createCPADrillDownSteps(
     };
 
     // 步骤4: 判定条件（显示所有异常指标的判定）
+    const conditionTexts: string[] = [];
     const conditions: Array<{ name: string; actualValue: number; thresholdValue: number; result: boolean }> = [];
+
     if (cpcAbnormal) {
+        conditionTexts.push('CPC > Benchmark × 110% → 异常');
         conditions.push({
-            name: 'CPC > Benchmark × 1.1',
+            name: 'CPC',
             actualValue: cpcValue,
             thresholdValue: avgCpc * 1.1,
             result: true
         });
     }
     if (cvrAbnormal) {
+        conditionTexts.push('CVR < Benchmark × 90% → 异常');
         conditions.push({
-            name: 'CVR < Benchmark × 0.9',
+            name: 'CVR',
             actualValue: cvrValue,
             thresholdValue: avgCvr * 0.9,
             result: true
@@ -878,6 +882,7 @@ function createCPADrillDownSteps(
         stepName: '判定条件',
         icon: '✓',
         content: {
+            condition: conditionTexts.join('\n'),
             multiIndicators: true,
             multiConditions: conditions
         }
@@ -937,7 +942,7 @@ function createCVRDrillDownSteps(
             name: 'Click-to-PV',
             formula: 'LPV / Clicks',
             calculation: `${lpv} / ${clicks} = ${(clickToPvValue * 100).toFixed(1)}%`,
-            condition: 'Click-to-PV < 90%',
+            condition: 'Click-to-PV < Benchmark × 90%',
             actualValue: clickToPvValue,
             thresholdValue: benchmarks.avgClickToPvRate * 0.9,
             isAbnormal: clickToPvAbnormal,
@@ -947,7 +952,7 @@ function createCVRDrillDownSteps(
             name: 'ATC Rate',
             formula: 'ATC / LPV',
             calculation: `${atc} / ${lpv} = ${(atcValue * 100).toFixed(1)}%`,
-            condition: 'ATC Rate < 90%',
+            condition: 'ATC Rate < Benchmark × 90%',
             actualValue: atcValue,
             thresholdValue: benchmarks.avgAtcRate * 0.9,
             isAbnormal: atcAbnormal,
@@ -955,9 +960,9 @@ function createCVRDrillDownSteps(
         },
         {
             name: 'Checkout',
-            formula: 'IC / ATC',
+            formula: 'Initiated Checkouts / ATC',
             calculation: `${ic} / ${atc} = ${(checkoutValue * 100).toFixed(1)}%`,
-            condition: 'Checkout < 90%',
+            condition: 'Checkout < Benchmark × 90%',
             actualValue: checkoutValue,
             thresholdValue: benchmarks.avgCheckoutRate * 0.9,
             isAbnormal: checkoutAbnormal,
@@ -965,9 +970,9 @@ function createCVRDrillDownSteps(
         },
         {
             name: 'Purchase',
-            formula: 'Purch / IC',
+            formula: 'Purch / Initiated Checkouts',
             calculation: `${purch} / ${ic} = ${(purchaseValue * 100).toFixed(1)}%`,
-            condition: 'Purchase < 90%',
+            condition: 'Purchase < Benchmark × 90%',
             actualValue: purchaseValue,
             thresholdValue: benchmarks.avgPurchaseRate * 0.9,
             isAbnormal: purchaseAbnormal,
