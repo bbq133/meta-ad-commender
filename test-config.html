@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Google Sheet Config</title>
+</head>
+<body>
+    <h1>Google Sheet Config Test</h1>
+    <button onclick="clearCache()">Clear Cache</button>
+    <button onclick="testLoad()">Test Load Config</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { loadAppConfig, clearConfigCache } from './services/googleSheetConfigService.ts';
+
+        window.clearCache = () => {
+            clearConfigCache();
+            document.getElementById('output').textContent = 'Cache cleared!';
+        };
+
+        window.testLoad = async () => {
+            try {
+                const config = await loadAppConfig(true);
+                document.getElementById('output').textContent = JSON.stringify(config, null, 2);
+            } catch (error) {
+                document.getElementById('output').textContent = 'Error: ' + error.message;
+            }
+        };
+    </script>
+</body>
+</html>

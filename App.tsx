@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { OverviewTab } from './components/tabs/OverviewTab';
 import { BusinessLineTab } from './components/tabs/BusinessLineTab';
@@ -10,39 +10,17 @@ import { LayerConfigModal } from './components/LayerConfigModal';
 import { RawAdRecord, AdConfiguration, TodoItem, LayerConfiguration, DEFAULT_LAYER_CONFIG } from './types';
 import { calculateDefaultThresholds, QuadrantThresholds } from './utils/quadrantUtils';
 import { matchesConfig } from './utils/dataUtils';
-import { BarChart3, Upload, Settings, Zap, Download } from 'lucide-react';
+import { BarChart3, Upload, Settings, Zap, Download, RefreshCw } from 'lucide-react';
+import { useConfig } from './contexts/ConfigContext';
 
 function App() {
+    // 从 Google Sheet 获取配置
+    const { config: sheetConfig, isLoading: isConfigLoading, refreshConfig } = useConfig();
+
     const [data, setData] = useState<RawAdRecord[]>([]);
     const [activeTab, setActiveTab] = useState<'overview' | 'business' | 'execution' | 'quadrant' | 'todo' | 'newaudience'>('overview');
-    const [configs, setConfigs] = useState<AdConfiguration[]>([
-        {
-            id: '1',
-            name: 'AO',
-            level: 'Campaign',
-            budget: 5000,
-            targetType: 'ROI',
-            targetValue: 4.5,
-            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AO' }],
-            campaignPeriod: {
-                startDate: '2025-12-01',
-                endDate: '2025-12-31'
-            }
-        },
-        {
-            id: '2',
-            name: 'AI',
-            level: 'Campaign',
-            budget: 3000,
-            targetType: 'ROI',
-            targetValue: 5.0,
-            rules: [{ field: 'campaign_name', operator: 'contains', value: '-AI' }],
-            campaignPeriod: {
-                startDate: '2025-12-15',
-                endDate: '2026-01-15'
-            }
-        }
-    ]);
+    const [configs, setConfigs] = useState<AdConfiguration[]>([]);
+    const [configsInitialized, setConfigsInitialized] = useState(false);
     const [selectedConfigIds, setSelectedConfigIds] = useState<string[]>([]);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -55,6 +33,57 @@ function App() {
 
     // Store user-adjusted thresholds for each business line
     const [userAdjustedThresholds, setUserAdjustedThresholds] = useState<Map<string, QuadrantThresholds>>(new Map());
+
+    // 从 Google Sheet 加载业务线配置
+    useEffect(() => {
+        if (sheetConfig && !configsInitialized) {
+            // 映射 ruleField 到正确的类型
+            const mapRuleField = (field: string): 'campaign_name' | 'adset_name' | 'ad_name' => {
+                const fieldMap: Record<string, 'campaign_name' | 'adset_name' | 'ad_name'> = {
+                    'Campaign Name': 'campaign_name',
+                    'campaign_name': 'campaign_name',
+                    'AdSet Name': 'adset_name',
+                    'adset_name': 'adset_name',
+                    'Ad Name': 'ad_name',
+                    'ad_name': 'ad_name'
+                };
+                return fieldMap[field] || 'campaign_name';
+            };
+
+            // 映射 ruleOperator 到正确的类型
+            const mapOperator = (op: string): 'contains' | 'not_contains' | 'equals' => {
+                const opLower = op.toLowerCase();
+                if (opLower === 'contains') return 'contains';
+                if (opLower === 'not_contains' || opLower === 'not contains') return 'not_contains';
+                if (opLower === 'equals') return 'equals';
+                return 'contains';
+            };
+
+            const newConfigs: AdConfiguration[] = sheetConfig.businessLines.map((bl, index) => ({
+                id: String(index + 1),
+                name: bl.name,
+                level: bl.analysisLevel,
+                budget: bl.budget,
+                targetType: bl.kpiType,
+                targetValue: bl.targetValue,
+                rules: [{
+                    field: mapRuleField(bl.ruleField),
+                    operator: mapOperator(bl.ruleOperator),
+                    value: bl.ruleValue
+                }],
+                campaignPeriod: {
+                    startDate: '',
+                    endDate: ''
+                }
+            }));
+
+            if (newConfigs.length > 0) {
+                setConfigs(newConfigs);
+                setConfigsInitialized(true);
+                console.log('✅ Loaded business lines from Google Sheet:', newConfigs);
+            }
+        }
+    }, [sheetConfig, configsInitialized]);
 
     // Todo toggle handler
     const handleTodoToggle = (item: TodoItem) => {
@@ -70,16 +99,32 @@ function App() {
         });
     };
 
-    // 初始化日期范围
-    useMemo(() => {
-        if (data.length > 0 && !startDate) {
-            const dates = data.map(r => r.date).sort();
-            const latestDate = dates[dates.length - 1];
-            const earliestDate = dates[Math.max(0, dates.length - 4)];
-            setEndDate(latestDate);
-            setStartDate(earliestDate);
+    // 初始化日期范围（使用 Google Sheet 配置的默认天数）
+    useEffect(() => {
+        if (data.length > 0 && !startDate && sheetConfig) {
+            const defaultDays = sheetConfig.system.defaultDateDays || 7;
+
+            // 使用系统当前日期作为结束日期
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // 计算开始日期（往前推 defaultDays 天）
+            const startDateObj = new Date(today);
+            startDateObj.setDate(startDateObj.getDate() - defaultDays + 1);
+
+            const formatDate = (date: Date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            setEndDate(formatDate(today));
+            setStartDate(formatDate(startDateObj));
+
+            console.log(`📅 Set date range to ${defaultDays} days from Google Sheet config (ending today)`);
         }
-    }, [data, startDate]);
+    }, [data, startDate, sheetConfig]);
 
     // 过滤数据（仅日期筛选，不应用配置筛选）
     const { filteredData, comparisonData } = useMemo(() => {
@@ -242,6 +287,26 @@ function App() {
                             >
                                 <Upload className="w-4 h-4" />
                                 重新上传
+                            </button>
+
+                            {/* Refresh Config */}
+                            <button
+                                onClick={async () => {
+                                    if (confirm('确定要从 Google Sheet 重新加载配置吗？这将重置日期范围。')) {
+                                        await refreshConfig();
+                                        setConfigsInitialized(false); // 重置初始化标志
+                                        // 清空日期范围，让它根据新的 defaultDateDays 重新初始化
+                                        setStartDate('');
+                                        setEndDate('');
+                                        alert('配置已刷新！日期范围将根据新的默认天数重新设置。');
+                                    }
+                                }}
+                                disabled={isConfigLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-100 hover:bg-green-200 rounded-lg text-sm font-medium text-green-700 transition-colors disabled:opacity-50"
+                                title="从 Google Sheet 重新加载配置"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${isConfigLoading ? 'animate-spin' : ''}`} />
+                                刷新配置
                             </button>
                         </div>
                     </div>

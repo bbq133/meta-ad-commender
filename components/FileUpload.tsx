@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { Upload, FileSpreadsheet, AlertCircle, Loader2, ArrowRight, ArrowLeft, Plus, Trash2, Settings, CheckCircle, RotateCcw } from 'lucide-react';
@@ -19,6 +19,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
     const [error, setError] = useState<string>('');
     const [localConfigs, setLocalConfigs] = useState<AdConfiguration[]>(configs);
     const [showLayerModal, setShowLayerModal] = useState(false);
+
+    // 同步 props 的变化到 local state
+    useEffect(() => {
+        console.log('📋 FileUpload received configs:', configs);
+        setLocalConfigs(configs);
+    }, [configs]);
 
     const processRawData = (results: any[]): RawAdRecord[] => {
         try {

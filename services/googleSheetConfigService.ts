@@ -1,0 +1,255 @@
+// Google Sheet 配置服务
+// 从 Google Sheet 读取系统配置数据
+
+// Google Sheet ID
+const SHEET_ID = '1FJfjyY84ujCnQ_3VGbLAaKn6Klqv5RzfTe14_El-z2w';
+
+// CSV 导出 URL 模板
+const getSheetCSVUrl = (sheetName: string) =>
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+
+// 配置类型定义
+export interface SystemConfig {
+    defaultDateDays: number;
+    geminiApiKey: string;
+}
+
+export interface BusinessLineConfig {
+    name: string;
+    analysisLevel: 'Campaign' | 'AdSet' | 'Ad';
+    budget: number;
+    kpiType: 'ROI' | 'CPC' | 'CPM';
+    targetValue: number;
+    ruleField: string;
+    ruleOperator: string;
+    ruleValue: string;
+}
+
+export interface AdLayerConfig {
+    layer: 'awareness' | 'traffic' | 'conversion';
+    ruleField: string;
+    ruleOperator: string;
+    ruleValue: string;
+}
+
+export interface AppConfig {
+    system: SystemConfig;
+    businessLines: BusinessLineConfig[];
+    adLayers: AdLayerConfig[];
+    loadedAt: string;
+}
+
+// 缓存配置
+const CACHE_KEY = 'google_sheet_config_cache';
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5分钟缓存
+
+/**
+ * 解析 CSV 文本（处理引号内的逗号）
+ */
+function parseCSV(csvText: string): Record<string, string>[] {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) return [];
+
+    // 解析单行 CSV（处理引号）
+    const parseLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++; // 跳过下一个引号
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+
+        result.push(current.trim());
+        return result;
+    };
+
+    const headers = parseLine(lines[0]);
+
+    return lines.slice(1).map(line => {
+        const values = parseLine(line);
+        const row: Record<string, string> = {};
+        headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+        });
+        return row;
+    });
+}
+
+/**
+ * 获取 Google Sheet 数据
+ */
+async function fetchSheetData(sheetName: string): Promise<Record<string, string>[]> {
+    const url = getSheetCSVUrl(sheetName);
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch sheet ${sheetName}: ${response.statusText}`);
+        }
+        const csvText = await response.text();
+        return parseCSV(csvText);
+    } catch (error) {
+        console.error(`Error fetching sheet ${sheetName}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * 加载系统配置
+ */
+async function loadSystemConfig(): Promise<SystemConfig> {
+    const rows = await fetchSheetData('config');
+
+    const configMap = new Map<string, string>();
+    rows.forEach(row => {
+        if (row.config_key && row.config_value) {
+            configMap.set(row.config_key, row.config_value);
+        }
+    });
+
+    return {
+        defaultDateDays: parseInt(configMap.get('default_date_days') || '7', 10),
+        geminiApiKey: configMap.get('gemini_api_key') || ''
+    };
+}
+
+/**
+ * 加载业务线配置
+ */
+async function loadBusinessLines(): Promise<BusinessLineConfig[]> {
+    const rows = await fetchSheetData('business_lines');
+
+    console.log('📊 Raw business_lines data:', rows);
+
+    const configs = rows
+        .filter(row => row.name) // 过滤空行
+        .map(row => ({
+            name: row.name,
+            analysisLevel: (row.analysis_level as 'Campaign' | 'AdSet' | 'Ad') || 'Campaign',
+            budget: parseFloat(row.budget) || 0,
+            kpiType: (row.kpi_type as 'ROI' | 'CPC' | 'CPM') || 'ROI',
+            targetValue: parseFloat(row.target_value) || 0,
+            ruleField: row.rule_field || 'Campaign Name',
+            ruleOperator: row.rule_operator || 'Contains',
+            ruleValue: row.rule_value || ''
+        }));
+
+    console.log('✅ Parsed business lines:', configs);
+    return configs;
+}
+
+/**
+ * 加载广告层级配置
+ */
+async function loadAdLayers(): Promise<AdLayerConfig[]> {
+    // 尝试加载 funnel_thresholds 表（用户创建的表名）
+    const rows = await fetchSheetData('funnel_thresholds');
+
+    return rows
+        .filter(row => row.layer) // 过滤空行
+        .map(row => ({
+            layer: row.layer as 'awareness' | 'traffic' | 'conversion',
+            ruleField: row.rule_field || 'Campaign Name',
+            ruleOperator: row.rule_operator || 'Contains',
+            ruleValue: row.rule_value || ''
+        }));
+}
+
+/**
+ * 加载全部配置（带缓存）
+ */
+export async function loadAppConfig(forceRefresh = false): Promise<AppConfig> {
+    // 检查缓存
+    if (!forceRefresh) {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            try {
+                const config = JSON.parse(cached) as AppConfig;
+                const loadedAt = new Date(config.loadedAt).getTime();
+                const now = Date.now();
+
+                if (now - loadedAt < CACHE_DURATION_MS) {
+                    console.log('📦 Using cached Google Sheet config');
+                    return config;
+                }
+            } catch (e) {
+                console.warn('Failed to parse cached config');
+            }
+        }
+    }
+
+    console.log('🔄 Loading config from Google Sheets...');
+
+    // 并行加载所有配置
+    const [system, businessLines, adLayers] = await Promise.all([
+        loadSystemConfig(),
+        loadBusinessLines(),
+        loadAdLayers()
+    ]);
+
+    const config: AppConfig = {
+        system,
+        businessLines,
+        adLayers,
+        loadedAt: new Date().toISOString()
+    };
+
+    // 保存到缓存
+    localStorage.setItem(CACHE_KEY, JSON.stringify(config));
+
+    console.log('✅ Config loaded:', config);
+
+    return config;
+}
+
+/**
+ * 清除配置缓存
+ */
+export function clearConfigCache(): void {
+    localStorage.removeItem(CACHE_KEY);
+}
+
+/**
+ * 获取默认配置（当 Google Sheet 不可用时）
+ */
+export function getDefaultConfig(): AppConfig {
+    return {
+        system: {
+            defaultDateDays: 7,
+            geminiApiKey: ''
+        },
+        businessLines: [
+            {
+                name: 'AO',
+                analysisLevel: 'Campaign',
+                budget: 5000,
+                kpiType: 'ROI',
+                targetValue: 4.5,
+                ruleField: 'Campaign Name',
+                ruleOperator: 'Contains',
+                ruleValue: '-AO'
+            }
+        ],
+        adLayers: [
+            { layer: 'awareness', ruleField: 'Campaign Name', ruleOperator: 'Contains', ruleValue: '-AW-' },
+            { layer: 'traffic', ruleField: 'Campaign Name', ruleOperator: 'Contains', ruleValue: '-TR-' },
+            { layer: 'conversion', ruleField: 'Campaign Name', ruleOperator: 'Contains', ruleValue: '-CV-' }
+        ],
+        loadedAt: new Date().toISOString()
+    };
+}

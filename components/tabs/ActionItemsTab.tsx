@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Download, Trash2, Info, ChevronDown, ChevronRight, Lightbulb, AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react';
 import { RawAdRecord, AdConfiguration } from '../../types';
 import { QuadrantThresholds } from '../../utils/quadrantUtils';
@@ -20,6 +20,8 @@ import { toggleGuidance, getPriorityBadge, GuidanceDetailPanel } from './Guidanc
 import { diagnoseCampaign, diagnoseCampaignWithContext, DiagnosticResult, CampaignContext, convertToDetailedDiagnostic, diagnoseAllScenarios, calculateTrend, TrendInfo } from '../../utils/campaignDiagnostics';
 import { calculateBenchmarks, CampaignBenchmarks } from '../../utils/benchmarkCalculator';
 import { calculateL3DL7DROI } from '../../utils/trendCalculator';
+import { AIDiagnosticPanel, AIDiagnosticPanelRef } from './AIDiagnosticPanel';
+import { DiagnosticDetail } from '../../utils/aiSummaryUtils';
 
 interface ActionItemsTabProps {
     data: RawAdRecord[];
@@ -313,9 +315,16 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     const [naKPI, setNaKPI] = useState<'ROI' | 'CPC' | 'CPM'>('ROI');
     const [naSearchText, setNaSearchText] = useState('');
     const [naBusinessLineFilter, setNaBusinessLineFilter] = useState<string>('all'); // 'all' or businessLineId
+    const [blPriorityFilter, setBlPriorityFilter] = useState<'all' | 'P0' | 'P1'>('all'); // Priority filter for Business Line
 
     // 调优指导展开状态
     const [blExpandedGuidance, setBlExpandedGuidance] = useState<Set<string>>(new Set());
+
+    // AI诊断数据Map (campaignId -> diagnosticDetails)
+    const [diagnosticsMap, setDiagnosticsMap] = useState<Map<string, DiagnosticDetail[]>>(new Map());
+
+    // AI诊断面板 ref
+    const aiDiagnosticRef = useRef<AIDiagnosticPanelRef>(null);
 
     // 排序状态 - Business Line
     const [campaignSort, setCampaignSort] = useState<{ field: 'spend' | 'kpi'; direction: 'asc' | 'desc' }>({
@@ -360,6 +369,35 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             ads = ads.filter(a => matchingCampaignNames.has(a.campaignName));
         }
 
+        // Filter by priority (only affects ROI campaigns)
+        if (blPriorityFilter !== 'all') {
+            campaigns = campaigns.filter(c => {
+                if (c.kpiType !== 'ROI') return true; // Non-ROI campaigns are not affected by priority filter
+
+                // Calculate priority based on ROI vs Benchmark
+                const roi = c.actualValue;
+                const benchmark = c.avgValue;
+
+                if (benchmark <= 0) return true; // Skip if no valid benchmark
+
+                const threshold80 = benchmark * 0.8;
+
+                // P0: ROI < Benchmark × 80% (低于基准 20% 以上)
+                // P1: Benchmark × 80% ≤ ROI ≤ Benchmark (低于基准 0-20%)
+                if (blPriorityFilter === 'P0') {
+                    return roi < threshold80;
+                } else if (blPriorityFilter === 'P1') {
+                    return roi >= threshold80 && roi <= benchmark;
+                }
+
+                return true;
+            });
+            // Also filter adSets and ads that belong to filtered campaigns
+            const filteredCampaignNames = new Set(campaigns.map(c => c.campaignName));
+            adSets = adSets.filter(a => filteredCampaignNames.has(a.campaignName));
+            ads = ads.filter(a => filteredCampaignNames.has(a.campaignName));
+        }
+
         // Apply level filter only when a specific level is selected
         if (blFilterLevel === 'Campaign') {
             return { campaigns, adSets: [], ads: [] };
@@ -371,7 +409,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             // Default: show all levels
             return { campaigns, adSets, ads };
         }
-    }, [blResult, blRemovedIds, blFilterLevel, blSearchText, blBusinessLineFilter]);
+    }, [blResult, blRemovedIds, blFilterLevel, blSearchText, blBusinessLineFilter, blPriorityFilter]);
 
     // 过滤已删除的项目 - New Audience
     const filteredNaResult = useMemo(() => {
@@ -504,6 +542,73 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
         });
     }, [filteredBlResult, adSort]);
 
+    // 预计算所有Campaign的诊断数据（用于AI诊断面板）
+    const campaignDiagnosticsData = useMemo(() => {
+        if (!filteredBlResult) return new Map<string, DiagnosticDetail[]>();
+
+        const diagMap = new Map<string, DiagnosticDetail[]>();
+        const campaignBenchmarks = calculateBenchmarks(filteredBlResult.campaigns);
+
+        filteredBlResult.campaigns.forEach(campaign => {
+            if (campaign.kpiType !== 'ROI' || !campaignBenchmarks) {
+                return;
+            }
+
+            const metrics = {
+                spend: campaign.spend,
+                roi: campaign.actualValue,
+                cvr: campaign.metrics?.cvr,
+                cpc: campaign.metrics?.cpc,
+                cpm: campaign.metrics?.cpm,
+                cpa: campaign.metrics?.cpa,
+                ctr: campaign.metrics?.ctr,
+                aov: campaign.metrics?.aov,
+                frequency: campaign.metrics?.frequency || 0,
+                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                checkout_rate: campaign.metrics?.checkout_rate || 0,
+                purchase_rate: campaign.metrics?.purchase_rate || 0,
+            };
+
+            // 计算上下文
+            const adsetCount = filteredBlResult.adSets.filter(a => a.campaignName === campaign.campaignName).length || 1;
+            const start = new Date(dateRange.start);
+            const end = new Date(dateRange.end);
+            const activeDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const config = configs.find(c => c.id === campaign.businessLineId);
+            const totalBudget = config?.budget || 0;
+            const dailyBudget = totalBudget / activeDays / Math.max(filteredBlResult.campaigns.length, 1);
+
+            const context: CampaignContext = {
+                adsetCount,
+                activeDays,
+                dailyBudget,
+                campaignBudget: dailyBudget * activeDays
+            };
+
+            // 获取诊断场景
+            const diagResults = diagnoseAllScenarios(metrics as any, campaignBenchmarks, context);
+
+            if (diagResults.length > 0) {
+                const details: DiagnosticDetail[] = diagResults.map(result => ({
+                    campaignName: campaign.campaignName,
+                    priority: campaign.priority || null,
+                    scenario: result.scenario,
+                    diagnosis: result.diagnosis,
+                    action: result.action
+                }));
+
+                diagMap.set(campaign.id, details);
+            }
+        });
+
+        return diagMap;
+    }, [filteredBlResult, dateRange, configs]);
+
+    // 当诊断数据变化时更新state
+    React.useEffect(() => {
+        setDiagnosticsMap(campaignDiagnosticsData);
+    }, [campaignDiagnosticsData]);
+
     // 生成 Action Items
     const handleGenerate = () => {
         setIsLoading(true);
@@ -515,6 +620,11 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             setBlRemovedIds(new Set());
             setNaRemovedIds(new Set());
             setIsLoading(false);
+
+            // 自动触发 AI 诊断
+            setTimeout(() => {
+                aiDiagnosticRef.current?.generate();
+            }, 500);
         }, 500);
     };
 
@@ -641,6 +751,13 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                 </div>
                             </div>
 
+                            {/* AI 智能诊断面板 */}
+                            <AIDiagnosticPanel
+                                ref={aiDiagnosticRef}
+                                result={filteredBlResult}
+                                diagnosticsMap={diagnosticsMap}
+                            />
+
                             {/* 统计说明 */}
                             <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-start gap-3">
                                 <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -661,10 +778,10 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                 </div>
                             </div>
 
-                            {/* Filter Controls */}
+                            {/* Filter Controls - 分组布局 */}
                             <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                    {/* Business Line Filter */}
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    {/* 业务线筛选组 */}
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold text-slate-700">业务线:</span>
                                         <select
@@ -680,16 +797,69 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                             ))}
                                         </select>
                                     </div>
-                                    <LevelToggle
-                                        levels={['All', 'Campaign', 'AdSet', 'Ad']}
-                                        selected={blFilterLevel}
-                                        onChange={(level) => setBlFilterLevel(level as 'All' | 'Campaign' | 'AdSet' | 'Ad')}
-                                    />
-                                    <SearchInput
-                                        value={blSearchText}
-                                        onChange={setBlSearchText}
-                                        placeholder={`Search ${blFilterLevel} names...`}
-                                    />
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* 层级筛选组 */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700">层级:</span>
+                                        <LevelToggle
+                                            levels={['All', 'Campaign', 'AdSet', 'Ad']}
+                                            selected={blFilterLevel}
+                                            onChange={(level) => setBlFilterLevel(level as 'All' | 'Campaign' | 'AdSet' | 'Ad')}
+                                        />
+                                    </div>
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* 关键词搜索组 */}
+                                    <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                        <span className="text-xs font-bold text-slate-700">关键词:</span>
+                                        <SearchInput
+                                            value={blSearchText}
+                                            onChange={setBlSearchText}
+                                            placeholder={`搜索 ${blFilterLevel === 'All' ? '所有' : blFilterLevel} 名称...`}
+                                        />
+                                    </div>
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* 优先级筛选组 */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700">优先级:</span>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => setBlPriorityFilter('all')}
+                                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${blPriorityFilter === 'all'
+                                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                                    : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                All
+                                            </button>
+                                            <button
+                                                onClick={() => setBlPriorityFilter('P0')}
+                                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${blPriorityFilter === 'P0'
+                                                    ? 'bg-red-600 text-white shadow-sm'
+                                                    : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                🔴 P0
+                                            </button>
+                                            <button
+                                                onClick={() => setBlPriorityFilter('P1')}
+                                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${blPriorityFilter === 'P1'
+                                                    ? 'bg-yellow-600 text-white shadow-sm'
+                                                    : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                🟡 P1
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1374,10 +1544,10 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                             </div>
 
 
-                            {/* Filter Controls */}
+                            {/* Filter Controls - 分组布局 */}
                             <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-                                <div className="flex items-center gap-3 flex-wrap">
-                                    {/* Business Line Filter */}
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    {/* 业务线筛选组 */}
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold text-slate-700">业务线:</span>
                                         <select
@@ -1393,23 +1563,45 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                             ))}
                                         </select>
                                     </div>
-                                    <span className="text-sm font-bold text-slate-700">KPI：</span>
-                                    <LevelToggle
-                                        levels={['ROI', 'CPC', 'CPM']}
-                                        selected={naKPI}
-                                        onChange={(kpi) => setNaKPI(kpi as 'ROI' | 'CPC' | 'CPM')}
-                                    />
-                                    <span className="text-sm font-bold text-slate-700 ml-3">Filter：</span>
-                                    <LevelToggle
-                                        levels={['All', 'AdSet', 'Ad']}
-                                        selected={naFilterLevel}
-                                        onChange={(level) => setNaFilterLevel(level as 'All' | 'AdSet' | 'Ad')}
-                                    />
-                                    <SearchInput
-                                        value={naSearchText}
-                                        onChange={setNaSearchText}
-                                        placeholder={`Search ${naFilterLevel} names...`}
-                                    />
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* KPI筛选组 */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700">KPI:</span>
+                                        <LevelToggle
+                                            levels={['ROI', 'CPC', 'CPM']}
+                                            selected={naKPI}
+                                            onChange={(kpi) => setNaKPI(kpi as 'ROI' | 'CPC' | 'CPM')}
+                                        />
+                                    </div>
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* 层级筛选组 */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700">层级:</span>
+                                        <LevelToggle
+                                            levels={['All', 'AdSet', 'Ad']}
+                                            selected={naFilterLevel}
+                                            onChange={(level) => setNaFilterLevel(level as 'All' | 'AdSet' | 'Ad')}
+                                        />
+                                    </div>
+
+                                    {/* 分隔符 */}
+                                    <div className="h-6 w-px bg-slate-300"></div>
+
+                                    {/* 关键词搜索组 */}
+                                    <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                        <span className="text-xs font-bold text-slate-700">关键词:</span>
+                                        <SearchInput
+                                            value={naSearchText}
+                                            onChange={setNaSearchText}
+                                            placeholder={`搜索 ${naFilterLevel === 'All' ? '所有' : naFilterLevel} 名称...`}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 

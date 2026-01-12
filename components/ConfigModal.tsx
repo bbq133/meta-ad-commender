@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Settings } from 'lucide-react';
 import { AdConfiguration, FilterRule } from '../types';
 
@@ -11,6 +11,13 @@ interface ConfigModalProps {
 
 export const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, configs, onSave }) => {
     const [localConfigs, setLocalConfigs] = useState<AdConfiguration[]>(configs);
+
+    // 同步 props 的变化到 local state
+    useEffect(() => {
+        console.log('📋 ConfigModal received configs:', configs);
+        console.log('📋 ConfigModal isOpen:', isOpen);
+        setLocalConfigs(configs);
+    }, [configs, isOpen]); // 当 configs 或 isOpen 变化时更新
 
     if (!isOpen) return null;
 
