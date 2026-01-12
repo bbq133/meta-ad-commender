@@ -908,6 +908,34 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
                             </div>
                         )}
 
+                        {/* Template Link Card */}
+                        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <div className="flex-shrink-0">
+                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold text-slate-900 mb-1">
+                                        💡 需要参考格式？
+                                    </p>
+                                    <p className="text-xs text-slate-600">
+                                        查看我们的 Google Sheets 模板，了解正确的数据格式和必填字段
+                                    </p>
+                                </div>
+                                <a
+                                    href="https://docs.google.com/spreadsheets/d/1aY7TMFfsJlZ9qyueiJGsYpBPf0qYzGh4lfFazJ7nsW8/edit?gid=0#gid=0"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                                >
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                    查看模板
+                                </a>
+                            </div>
+                        </div>
+
                         <div className="mb-8">
                             <label className="block">
                                 <input
