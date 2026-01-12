@@ -6,6 +6,7 @@ import { RefreshCw, AlertCircle } from 'lucide-react';
 import { createGeminiService, AISummaryResult } from '../../services/geminiService';
 import { generateDataSummary, DiagnosticDetail, DataSummary } from '../../utils/aiSummaryUtils';
 import { ActionItemsResult } from '../../utils/actionItemsUtils';
+import { useConfig } from '../../contexts/ConfigContext';
 
 interface AIDiagnosticPanelProps {
     result: ActionItemsResult;
@@ -17,24 +18,30 @@ export interface AIDiagnosticPanelRef {
     generate: () => void;
 }
 
-// 硬编码的 Gemini API Key
-const GEMINI_API_KEY = 'AIzaSyAKEyJjt4N65u4UYy9izR9NcQ85aYEN6tM';
-
 export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPanelProps>((
     { result, diagnosticsMap },
     ref
 ) => {
+    // 从 Google Sheet 获取配置
+    const { config } = useConfig();
+
     const [aiSummary, setAiSummary] = useState<AISummaryResult | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // 使用硬编码的 API Key
-    const apiKey = GEMINI_API_KEY;
+    // 从 Google Sheet 配置中读取 API Key
+    const configApiKey = config?.system.geminiApiKey || '';
+    // 备用 API Key（当配置读取失败时使用）
+    const FALLBACK_API_KEY = 'AIzaSyD_jgE4pqkHlmhKRqLpXBf_udxgS_Zkicw';
+    const apiKey = configApiKey || FALLBACK_API_KEY;
+
+    // 调试日志
+    console.log('🔍 [AIDiagnosticPanel] Using API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : '(none)');
 
     // 生成 AI 诊断
     const generateDiagnosis = async () => {
         if (!apiKey) {
-            setError('未配置 Gemini API Key，请在 Google Sheet 中配置');
+            setError('未配置 Gemini API Key，请在 Google Sheet 的 config 表中配置 gemini_api_key 字段');
             return;
         }
 
@@ -52,16 +59,26 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
             setAiSummary(summary);
         } catch (err: any) {
             console.error('AI Diagnosis error:', err);
+            console.error('Error details:', {
+                message: err.message,
+                stack: err.stack,
+                name: err.name,
+                cause: err.cause
+            });
 
             // 处理常见错误
-            if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('401')) {
-                setError('API Key 无效，请检查 Google Sheet 配置');
+            if (err.message?.includes('API key was reported as leaked')) {
+                setError('⚠️ API Key 已泄露被禁用。请访问 https://aistudio.google.com/app/apikey 创建新的 Key');
+            } else if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('401') || err.message?.includes('403')) {
+                setError('API Key 无效或未配置，请检查代码中的 GEMINI_API_KEY');
             } else if (err.message?.includes('QUOTA_EXCEEDED') || err.message?.includes('429')) {
                 setError('API 配额已用完，请稍后重试');
-            } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
-                setError('网络连接失败，请检查网络后重试');
+            } else if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+                setError('网络连接失败。可能原因：1) 需要科学上网访问 Google API  2) API Key 无效  3) 网络不稳定');
+            } else if (err.message?.includes('CORS')) {
+                setError('跨域请求失败，请检查 API 配置');
             } else {
-                setError('生成失败，请稍后重试');
+                setError(`生成失败: ${err.message || '未知错误'}`);
             }
         } finally {
             setIsGenerating(false);
