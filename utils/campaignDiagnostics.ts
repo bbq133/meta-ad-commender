@@ -664,11 +664,11 @@ export const convertToDetailedDiagnostic = (
         steps.push(...createDeliveryIssueSteps(result, metrics, benchmarks, context));
     }
 
-    // V2 新增：如果有趋势信息，移除原有的步骤5（归因诊断）和步骤6（Action建议）
+    // V2 新增：如果有趋势信息，移除原有的步骤6（Action建议）
     // 因为它们将被趋势逻辑、趋势决策和Action建议取代
     if (trendInfo) {
-        // 只保留步骤0-4
-        const filteredSteps = steps.filter(step => step.stepNumber <= 4);
+        // 只保留步骤0-5（现在归因诊断是步骤4，判定条件是步骤5）
+        const filteredSteps = steps.filter(step => step.stepNumber <= 5);
         steps.length = 0;
         steps.push(...filteredSteps);
 
@@ -676,9 +676,9 @@ export const convertToDetailedDiagnostic = (
         steps.push(createTrendLogicStep(trendInfo));
         steps.push(createTrendDecisionStep(trendInfo, result.action));
 
-        // 添加Action建议作为步骤7
+        // 添加Action建议作为步骤8
         steps.push({
-            stepNumber: 7,
+            stepNumber: 8,
             stepName: 'Action建议',
             icon: '💡',
             content: {
@@ -854,7 +854,21 @@ function createCPADrillDownSteps(
         }
     };
 
-    // 步骤4: 判定条件（显示所有异常指标的判定）
+    // 步骤4: 归因诊断 (新位置)
+    const step4: DiagnosticStep = {
+        stepNumber: 4,
+        stepName: '归因诊断',
+        icon: '🎯',
+        content: {
+            diagnosis: isDoubleKill
+                ? '流量贵且转化差'
+                : cpcAbnormal
+                    ? '流量成本过高'
+                    : '转化能力不足'
+        }
+    };
+
+    // 步骤5: 判定条件 (原步骤4)
     const conditionTexts: string[] = [];
     const conditions: Array<{ name: string; actualValue: number; thresholdValue: number; result: boolean }> = [];
 
@@ -877,28 +891,14 @@ function createCPADrillDownSteps(
         });
     }
 
-    const step4: DiagnosticStep = {
-        stepNumber: 4,
+    const step5: DiagnosticStep = {
+        stepNumber: 5,
         stepName: '判定条件',
         icon: '✓',
         content: {
             condition: conditionTexts.join('\n'),
             multiIndicators: true,
             multiConditions: conditions
-        }
-    };
-
-    // 步骤5: 归因诊断
-    const step5: DiagnosticStep = {
-        stepNumber: 5,
-        stepName: '归因诊断',
-        icon: '🎯',
-        content: {
-            diagnosis: isDoubleKill
-                ? '流量贵且转化差'
-                : cpcAbnormal
-                    ? '流量成本过高'
-                    : '转化能力不足'
         }
     };
 
@@ -1002,9 +1002,27 @@ function createCVRDrillDownSteps(
         }
     });
 
-    // 步骤4: 判定条件（全部显示，标注结果）
+    // 步骤4: 归因诊断 (新位置)
+    // 根据异常指标生成归因诊断
+    const abnormalIndicators = indicators.filter(i => i.isAbnormal);
+    const diagnosisList: string[] = [];
+    if (clickToPvAbnormal) diagnosisList.push('加载速度/误触');
+    if (atcAbnormal) diagnosisList.push('吸引力不足/不匹配');
+    if (checkoutAbnormal) diagnosisList.push('运费/信任感');
+    if (purchaseAbnormal) diagnosisList.push('技术故障/支付通道');
+
     steps.push({
         stepNumber: 4,
+        stepName: '归因诊断',
+        icon: '🎯',
+        content: {
+            diagnosis: diagnosisList.length > 0 ? diagnosisList.join(' + ') : 'CVR异常'
+        }
+    });
+
+    // 步骤5: 判定条件（全部显示，标注结果）(原步骤4)
+    steps.push({
+        stepNumber: 5,
         stepName: '判定条件',
         icon: '✓',
         content: {
@@ -1087,9 +1105,23 @@ function createCPCDrillDownSteps(
         }
     });
 
-    // 步骤4: 判定条件（全部显示，标注结果）
+    // 步骤4: 归因诊断 (新位置)
+    const diagnosisList: string[] = [];
+    if (ctrAbnormal) diagnosisList.push('素材/受众问题');
+    if (cpmAbnormal) diagnosisList.push('市场竞价/人群贵');
+
     steps.push({
         stepNumber: 4,
+        stepName: '归因诊断',
+        icon: '🎯',
+        content: {
+            diagnosis: diagnosisList.length > 0 ? diagnosisList.join(' + ') : 'CPC异常'
+        }
+    });
+
+    // 步骤5: 判定条件（全部显示，标注结果）(原步骤4)
+    steps.push({
+        stepNumber: 5,
         stepName: '判定条件',
         icon: '✓',
         content: {
@@ -1138,6 +1170,15 @@ function createCPATCDrillDownSteps(
         },
         {
             stepNumber: 4,
+            stepName: '归因诊断',
+            icon: '🎯',
+            content: {
+                diagnosis: result.diagnosis,
+                description: result.action.split('\n')[0]
+            }
+        },
+        {
+            stepNumber: 5,
             stepName: '判定条件',
             icon: '✓',
             content: {
@@ -1145,15 +1186,6 @@ function createCPATCDrillDownSteps(
                 actualValue: cpatcValue,
                 thresholdValue: benchmarks.avgCpatc * 1.1,
                 result: cpatcAbnormal
-            }
-        },
-        {
-            stepNumber: 5,
-            stepName: '归因诊断',
-            icon: '🎯',
-            content: {
-                diagnosis: result.diagnosis,
-                description: result.action.split('\n')[0]
             }
         },
         {
@@ -1211,6 +1243,15 @@ function createBudgetDilutionSteps(
         },
         {
             stepNumber: 4,
+            stepName: '归因诊断',
+            icon: '🎯',
+            content: {
+                diagnosis: '预算过度分散',
+                description: `Campaign预算只有$100，但开了10个AdSet，平均每组$10，无法支撑转化`
+            }
+        },
+        {
+            stepNumber: 5,
             stepName: '判定条件',
             icon: '✓',
             content: {
@@ -1218,15 +1259,6 @@ function createBudgetDilutionSteps(
                 actualValue: avgBudgetPerAdset,
                 thresholdValue: benchmarks.avgCpa,
                 result: avgBudgetPerAdset < benchmarks.avgCpa
-            }
-        },
-        {
-            stepNumber: 5,
-            stepName: '归因诊断',
-            icon: '🎯',
-            content: {
-                diagnosis: '预算过度散',
-                description: `Campaign预算只有$100，但开了10个AdSet，平均每组$10，无法支撑转化`
             }
         },
         {
@@ -1282,6 +1314,14 @@ function createDeliveryIssueSteps(
         },
         {
             stepNumber: 4,
+            stepName: '归因诊断',
+            icon: '🎯',
+            content: {
+                diagnosis: result.diagnosis
+            }
+        },
+        {
+            stepNumber: 5,
             stepName: '判定条件',
             icon: '✓',
             content: {
@@ -1290,14 +1330,6 @@ function createDeliveryIssueSteps(
                 thresholdValue: 0.8,
                 result: spendPacing < 0.8,
                 description: metrics.frequency ? `辅助判断: Frequency ${(metrics.frequency || 0).toFixed(2)}` : undefined
-            }
-        },
-        {
-            stepNumber: 5,
-            stepName: '归因诊断',
-            icon: '🎯',
-            content: {
-                diagnosis: result.diagnosis
             }
         },
         {
@@ -1386,7 +1418,7 @@ function createTrendLogicStep(trendInfo: TrendInfo): DiagnosticStep {
     const trendLabel = getTrendLabel(trendInfo.trend);
 
     return {
-        stepNumber: 5,
+        stepNumber: 6,
         stepName: '趋势逻辑',
         icon: '📈',
         content: {
@@ -1402,7 +1434,7 @@ function createTrendLogicStep(trendInfo: TrendInfo): DiagnosticStep {
 }
 
 /**
- * 创建趋势决策步骤（步骤6）
+ * 创建趋势决策步骤（步骤7）
  */
 function createTrendDecisionStep(trendInfo: TrendInfo, originalAction: string): DiagnosticStep {
     const trendIcon = getTrendIcon(trendInfo.trend);
@@ -1412,7 +1444,7 @@ function createTrendDecisionStep(trendInfo: TrendInfo, originalAction: string): 
     const recoveryCase2Message = '虽然 ROI 低于 Benchmark，但近期趋势显示回暖，暂不执行关停/调整，保留关停1-2天';
 
     return {
-        stepNumber: 6,
+        stepNumber: 7,
         stepName: '趋势决策',
         icon: trendIcon,
         content: {

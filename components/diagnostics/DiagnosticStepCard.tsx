@@ -12,21 +12,22 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
 
     // 根据步骤类型确定样式类
     const getStepClass = () => {
-        if (stepNumber === 0) return 'step-prerequisite';
-        if (stepNumber === 1) return 'step-scenario';
-        if (stepNumber === 2) return 'step-drilldown';
-        if (stepNumber === 3) return 'step-formula';       // 公式
-        if (stepNumber === 4) return 'step-judgment';      // 判定条件
-        if (stepNumber === 5) return 'step-trend';         // V2: 趋势逻辑
-        if (stepNumber === 6) {
-            // V2: 趋势决策 - 根据趋势状态变色
+        if (stepNumber === 0) return 'step-prerequisite';   // 触发条件
+        if (stepNumber === 1) return 'step-scenario';       // 核心异常场景
+        if (stepNumber === 2) return 'step-drilldown';      // 下钻检查指标
+        if (stepNumber === 3) return 'step-formula';        // 公式
+        if (stepNumber === 4) return 'step-attribution';    // 归因诊断 (新位置)
+        if (stepNumber === 5) return 'step-judgment';       // 判定条件 (原步骤4)
+        if (stepNumber === 6) return 'step-trend';          // 趋势逻辑 (原步骤5)
+        if (stepNumber === 7) {
+            // 趋势决策 - 根据趋势状态变色 (原步骤6)
             const trend = content.trend;
             if (trend === 'improving') return 'step-decision-improving';
             if (trend === 'declining') return 'step-decision-declining';
             if (trend === 'stable') return 'step-decision-stable';
             return 'step-decision-stable';
         }
-        if (stepNumber === 7) return 'step-action';        // Action建议
+        if (stepNumber === 8) return 'step-action';         // Action建议 (原步骤7)
         return '';
     };
 
@@ -89,8 +90,8 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
 
     // 渲染诊断结论
     const renderDiagnosis = () => {
-        // V2: 跳过步骤6，因为它有专门的renderTrendDecision
-        if (!content.diagnosis || stepNumber === 6) return null;
+        // 跳过步骤7（趋势决策），因为它有专门的renderTrendDecision
+        if (!content.diagnosis || stepNumber === 7) return null;
 
         return (
             <div className="diagnosis-block">
@@ -111,9 +112,9 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
         );
     };
 
-    // V2 新增：渲染趋势逻辑（步骤5）
+    // 渲染趋势逻辑（步骤6）
     const renderTrendLogic = () => {
-        if (stepNumber !== 5 || !content.l3dValue || !content.l7dValue) return null;
+        if (stepNumber !== 6 || !content.l3dValue || !content.l7dValue) return null;
 
         const getTrendStatusClass = () => {
             if (content.trend === 'improving') return 'improving';
@@ -140,9 +141,9 @@ export const DiagnosticStepCard: React.FC<DiagnosticStepCardProps> = ({ step, is
         );
     };
 
-    // V2 新增：渲染趋势决策（步骤6）
+    // 渲染趋势决策（步骤7）
     const renderTrendDecision = () => {
-        if (stepNumber !== 6) return null;
+        if (stepNumber !== 7) return null;
 
         const getTrendStatusClass = () => {
             if (content.trend === 'improving') return 'improving';
