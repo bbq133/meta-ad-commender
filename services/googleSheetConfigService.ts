@@ -115,16 +115,24 @@ async function fetchSheetData(sheetName: string): Promise<Record<string, string>
 async function loadSystemConfig(): Promise<SystemConfig> {
     const rows = await fetchSheetData('config');
 
+    console.log('📊 Raw config data:', rows);
+
     const configMap = new Map<string, string>();
     rows.forEach(row => {
-        if (row.config_key && row.config_value) {
-            configMap.set(row.config_key, row.config_value);
+        // 打印每一行的键和值，帮助调试
+        console.log('🔍 Config row keys:', Object.keys(row), 'values:', Object.values(row));
+        if (row.config_key && row.config_value !== undefined) {
+            configMap.set(row.config_key.trim(), String(row.config_value).trim());
+            console.log(`  ✅ Set config: ${row.config_key} = ${row.config_value}`);
         }
     });
 
+    const geminiKey = configMap.get('gemini_api_key') || '';
+    console.log('🔑 Gemini API Key from config:', geminiKey ? `${geminiKey.substring(0, 10)}...` : '(empty)');
+
     return {
         defaultDateDays: parseInt(configMap.get('default_date_days') || '7', 10),
-        geminiApiKey: configMap.get('gemini_api_key') || ''
+        geminiApiKey: geminiKey
     };
 }
 

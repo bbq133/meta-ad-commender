@@ -1,12 +1,11 @@
 // AI 智能诊断面板组件
 // 使用 Gemini API 生成智能调优概览
 
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { Sparkles, RefreshCw, Settings, X, AlertCircle } from 'lucide-react';
+import React, { useState, forwardRef, useImperativeHandle } from 'react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
 import { createGeminiService, AISummaryResult } from '../../services/geminiService';
 import { generateDataSummary, DiagnosticDetail, DataSummary } from '../../utils/aiSummaryUtils';
 import { ActionItemsResult } from '../../utils/actionItemsUtils';
-import { useConfig } from '../../contexts/ConfigContext';
 
 interface AIDiagnosticPanelProps {
     result: ActionItemsResult;
@@ -18,35 +17,19 @@ export interface AIDiagnosticPanelRef {
     generate: () => void;
 }
 
-// API Key 存储的 localStorage key
-const API_KEY_STORAGE_KEY = 'gemini_api_key';
+// 硬编码的 Gemini API Key
+const GEMINI_API_KEY = 'AIzaSyAKEyJjt4N65u4UYy9izR9NcQ85aYEN6tM';
 
 export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPanelProps>((
     { result, diagnosticsMap },
     ref
 ) => {
-    // 从 Google Sheet 获取配置
-    const { config: sheetConfig } = useConfig();
-
     const [aiSummary, setAiSummary] = useState<AISummaryResult | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [apiKey, setApiKey] = useState<string>('');
 
-    // 从 Google Sheet 或 localStorage 加载 API Key
-    useEffect(() => {
-        // 优先使用 Google Sheet 配置中的 API Key
-        if (sheetConfig?.system.geminiApiKey) {
-            setApiKey(sheetConfig.system.geminiApiKey);
-            console.log('🔑 Using Gemini API Key from Google Sheet');
-        } else {
-            // 回退到 localStorage
-            const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-            if (savedKey) {
-                setApiKey(savedKey);
-            }
-        }
-    }, [sheetConfig]);
+    // 使用硬编码的 API Key
+    const apiKey = GEMINI_API_KEY;
 
     // 生成 AI 诊断
     const generateDiagnosis = async () => {
