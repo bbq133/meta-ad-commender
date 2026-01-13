@@ -4,9 +4,27 @@
 // Google Sheet ID
 const SHEET_ID = '1FJfjyY84ujCnQ_3VGbLAaKn6Klqv5RzfTe14_El-z2w';
 
+// 工作表名称到 gid 的映射（Google Sheet 每个工作表有唯一的 gid）
+// 注意：gid 可以从 Google Sheet URL 的 #gid=XXX 部分获取
+const SHEET_GID_MAP: Record<string, number> = {
+    'config': 0  // config 工作表确认为 gid=0
+    // 其他工作表的 gid 未知，使用 gviz/tq 格式
+};
+
 // CSV 导出 URL 模板
-const getSheetCSVUrl = (sheetName: string) =>
-    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+// 使用 export 格式（实时数据，无缓存）用于已知 gid 的工作表
+// 使用 gviz/tq 格式（可能有缓存延迟）用于未知 gid 的工作表
+const getSheetCSVUrl = (sheetName: string) => {
+    const gid = SHEET_GID_MAP[sheetName];
+    if (gid !== undefined) {
+        // 使用 export 格式（实时，无缓存）- 解决 API Key 缓存问题
+        console.log(`🔗 Using export URL for ${sheetName} (gid=${gid})`);
+        return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+    }
+    // 使用 gviz/tq 格式
+    console.log(`🔗 Using gviz/tq URL for ${sheetName}`);
+    return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+};
 
 // 配置类型定义
 export interface SystemConfig {
@@ -102,6 +120,13 @@ async function fetchSheetData(sheetName: string): Promise<Record<string, string>
             throw new Error(`Failed to fetch sheet ${sheetName}: ${response.statusText}`);
         }
         const csvText = await response.text();
+
+        // 调试：输出原始 CSV 文本
+        console.log(`📄 [${sheetName}] Raw CSV from Google Sheet:`);
+        console.log('---RAW CSV START---');
+        console.log(csvText);
+        console.log('---RAW CSV END---');
+
         return parseCSV(csvText);
     } catch (error) {
         console.error(`Error fetching sheet ${sheetName}:`, error);
@@ -229,7 +254,11 @@ export async function loadAppConfig(forceRefresh = false): Promise<AppConfig> {
  * 清除配置缓存
  */
 export function clearConfigCache(): void {
+    console.log('🗑️ Clearing config cache...');
+    const before = localStorage.getItem(CACHE_KEY);
     localStorage.removeItem(CACHE_KEY);
+    const after = localStorage.getItem(CACHE_KEY);
+    console.log('🗑️ Cache cleared successfully!', { had: !!before, now: !!after });
 }
 
 /**

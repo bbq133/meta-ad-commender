@@ -29,19 +29,23 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // 从 Google Sheet 配置中读取 API Key
-    const configApiKey = config?.system.geminiApiKey || '';
-    // 备用 API Key（当配置读取失败时使用）
-    const FALLBACK_API_KEY = 'AIzaSyD_jgE4pqkHlmhKRqLpXBf_udxgS_Zkicw';
-    const apiKey = configApiKey || FALLBACK_API_KEY;
+    // 从 Google Sheet 配置中读取 API Key（不使用硬编码备用）
+    const apiKey = config?.system.geminiApiKey || '';
 
-    // 调试日志
-    console.log('🔍 [AIDiagnosticPanel] Using API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : '(none)');
+    // 详细调试日志
+    console.log('🔍 [AIDiagnosticPanel] ========== Config Debug ==========');
+    console.log('🔍 [AIDiagnosticPanel] Config object exists:', !!config);
+    console.log('🔍 [AIDiagnosticPanel] Full config:', config);
+    console.log('🔍 [AIDiagnosticPanel] System config:', config?.system);
+    console.log('🔍 [AIDiagnosticPanel] Gemini API Key:', apiKey ? `${apiKey.substring(0, 15)}... (length: ${apiKey.length})` : '(empty or undefined)');
+    console.log('🔍 [AIDiagnosticPanel] Config loaded at:', config?.loadedAt);
+    console.log('🔍 [AIDiagnosticPanel] =====================================');
 
     // 生成 AI 诊断
     const generateDiagnosis = async () => {
+        // 检查 API Key 是否配置
         if (!apiKey) {
-            setError('未配置 Gemini API Key，请在 Google Sheet 的 config 表中配置 gemini_api_key 字段');
+            setError('⚠️ 未配置 Gemini API Key\n\n请按以下步骤配置：\n1. 访问 https://aistudio.google.com/app/apikey 创建新的 API Key\n2. 打开 Google Sheet 配置表\n3. 在 config 工作表中找到 gemini_api_key 行\n4. 将新的 API Key 粘贴到 config_value 列\n5. 刷新页面重试');
             return;
         }
 
@@ -68,17 +72,17 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
 
             // 处理常见错误
             if (err.message?.includes('API key was reported as leaked')) {
-                setError('⚠️ API Key 已泄露被禁用。请访问 https://aistudio.google.com/app/apikey 创建新的 Key');
+                setError('⚠️ API Key 已泄露被禁用\n\n解决步骤：\n1. 访问 https://aistudio.google.com/app/apikey 创建新的 API Key\n2. 打开 Google Sheet 配置表\n3. 在 config 工作表中更新 gemini_api_key 的值\n4. 刷新页面重试\n\n⚠️ 重要：不要将 API Key 硬编码在代码中！');
             } else if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('401') || err.message?.includes('403')) {
-                setError('API Key 无效或未配置，请检查代码中的 GEMINI_API_KEY');
+                setError('⚠️ API Key 无效\n\n可能原因：\n1. API Key 已过期或被禁用\n2. API Key 格式错误\n3. API Key 权限不足\n\n解决步骤：\n1. 访问 https://aistudio.google.com/app/apikey 检查或创建新 Key\n2. 在 Google Sheet 的 config 工作表中更新 gemini_api_key\n3. 刷新页面重试');
             } else if (err.message?.includes('QUOTA_EXCEEDED') || err.message?.includes('429')) {
-                setError('API 配额已用完，请稍后重试');
+                setError('⚠️ API 配额已用完\n\n请稍后重试，或访问 https://aistudio.google.com 查看配额使用情况');
             } else if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
-                setError('网络连接失败。可能原因：1) 需要科学上网访问 Google API  2) API Key 无效  3) 网络不稳定');
+                setError('⚠️ 网络连接失败\n\n可能原因：\n1. 需要科学上网访问 Google API\n2. API Key 无效\n3. 网络不稳定\n\n请检查网络连接后重试');
             } else if (err.message?.includes('CORS')) {
-                setError('跨域请求失败，请检查 API 配置');
+                setError('⚠️ 跨域请求失败\n\n这通常是浏览器安全策略导致的，请检查 API 配置');
             } else {
-                setError(`生成失败: ${err.message || '未知错误'}`);
+                setError(`生成失败: ${err.message || '未知错误'}\n\n请查看浏览器控制台获取详细错误信息`);
             }
         } finally {
             setIsGenerating(false);
