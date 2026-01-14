@@ -26,27 +26,107 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
         setLocalConfigs(configs);
     }, [configs]);
 
+    const normalizeDate = (dateValue: any): string => {
+        if (!dateValue) return '';
+
+        try {
+            // 如果是数字,可能是 Excel 日期序列号
+            if (typeof dateValue === 'number') {
+                // Excel 日期序列号: 从 1900-01-01 开始的天数
+                // 但 Excel 有个 bug: 1900 年被错误地当作闰年,所以需要调整
+                const excelEpoch = new Date(1899, 11, 30); // 1899-12-30
+                const date = new Date(excelEpoch.getTime() + dateValue * 24 * 60 * 60 * 1000);
+
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            // 如果是 Date 对象 (Excel datetime)
+            if (dateValue instanceof Date) {
+                const year = dateValue.getFullYear();
+                const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+                const day = String(dateValue.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            // 转为字符串处理
+            const str = String(dateValue).trim();
+
+            // 如果包含时间部分 (例如: "2026-01-14 00:00:00")
+            if (str.includes(' ')) {
+                const datePart = str.split(' ')[0];
+                // 尝试解析并标准化
+                const date = new Date(datePart);
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+                return datePart;
+            }
+
+            // 如果是斜杠格式 (例如: "2026/1/14")
+            if (str.includes('/')) {
+                const date = new Date(str);
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            }
+
+            // 如果已经是标准格式或需要补零 (例如: "2026-1-14")
+            if (str.includes('-')) {
+                const date = new Date(str);
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            }
+
+            return str;
+        } catch (err) {
+            console.warn(`⚠️ Error normalizing date: ${dateValue}`, err);
+            return String(dateValue);
+        }
+    };
+
     const processRawData = (results: any[]): RawAdRecord[] => {
         try {
-            const mappedData: RawAdRecord[] = results
-                .filter(row => row['Day'] || row['campaign_name'])
-                .map(row => ({
-                    date: String(row['Day'] || row['date'] || ''),
-                    campaign_name: String(row['Campaign name'] || row['campaign_name'] || 'Unknown'),
-                    adset_name: String(row['Ad set name'] || row['adset_name'] || 'Unknown'),
-                    ad_name: String(row['Ad name'] || row['ad_name'] || 'Unknown'),
-                    spend: parseFloat(row['Amount spent (USD)'] || row['spend'] || 0),
-                    impressions: parseInt(row['Impressions'] || row['impressions'] || 0),
-                    link_clicks: parseInt(row['Link clicks'] || row['link_clicks'] || 0),
-                    purchases: parseInt(row['Purchases'] || row['purchases'] || 0),
-                    purchase_value: parseFloat(row['Purchases conversion value'] || row['purchase_value'] || 0),
-                    adds_to_cart: parseInt(row['Adds to cart'] || row['adds_to_cart'] || 0),
-                    checkouts_initiated: parseInt(row['Checkouts initiated'] || row['checkouts_initiated'] || 0),
-                    // 新增字段映射
-                    landing_page_views: parseInt(row['Website landing page views'] || row['landing_page_views'] || 0),
-                    frequency: parseFloat(row['Frequency'] || row['frequency'] || 0),
-                    reach: parseInt(row['Reach'] || row['reach'] || 0),
-                }));
+            console.log('🔍 Step 1: Raw data received:', results.length, 'rows');
+            console.log('🔍 First row columns:', Object.keys(results[0] || {}));
+            console.log('🔍 First row sample:', results[0]);
+
+            const filtered = results.filter(row => row['Day'] || row['campaign_name']);
+            console.log('🔍 Step 2: After filter (Day or campaign_name):', filtered.length, 'rows');
+
+            const mappedData: RawAdRecord[] = filtered.map(row => ({
+                date: normalizeDate(row['Day'] || row['date'] || ''),
+                campaign_name: String(row['Campaign name'] || row['campaign_name'] || 'Unknown'),
+                adset_name: String(row['Ad set name'] || row['adset_name'] || 'Unknown'),
+                ad_name: String(row['Ad name'] || row['ad_name'] || 'Unknown'),
+                spend: parseFloat(row['Amount spent (USD)'] || row['spend'] || 0),
+                impressions: parseInt(row['Impressions'] || row['impressions'] || 0),
+                link_clicks: parseInt(row['Link clicks'] || row['link_clicks'] || 0),
+                purchases: parseInt(row['Purchases'] || row['purchases'] || 0),
+                purchase_value: parseFloat(row['Purchases conversion value'] || row['purchase_value'] || 0),
+                adds_to_cart: parseInt(row['Adds to cart'] || row['adds_to_cart'] || 0),
+                checkouts_initiated: parseInt(row['Checkouts initiated'] || row['checkouts_initiated'] || 0),
+                // 新增字段映射
+                landing_page_views: parseInt(row['Website landing page views'] || row['landing_page_views'] || 0),
+                frequency: parseFloat(row['Frequency'] || row['frequency'] || 0),
+                reach: parseInt(row['Reach'] || row['reach'] || 0),
+            }));
+
+            console.log('🔍 Step 3: Mapped data:', mappedData.length, 'rows');
+            console.log('🔍 First mapped record:', mappedData[0]);
+            console.log('🔍 Sample dates:', mappedData.slice(0, 3).map(r => r.date));
 
             if (mappedData.length === 0) {
                 throw new Error('未找到有效数据，请检查文件格式');
@@ -54,6 +134,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
 
             return mappedData;
         } catch (err) {
+            console.error('❌ processRawData error:', err);
             throw new Error(`数据处理失败: ${err instanceof Error ? err.message : '未知错误'}`);
         }
     };

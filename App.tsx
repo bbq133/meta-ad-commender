@@ -128,7 +128,14 @@ function App() {
 
     // 过滤数据（仅日期筛选，不应用配置筛选）
     const { filteredData, comparisonData } = useMemo(() => {
-        if (!startDate || !endDate) return { filteredData: data, comparisonData: [] };
+        console.log('🔍 Step 5: Filtering data...');
+        console.log('🔍 Total data:', data.length);
+        console.log('🔍 Date range:', { startDate, endDate });
+
+        if (!startDate || !endDate) {
+            console.log('🔍 No date range set, returning all data');
+            return { filteredData: data, comparisonData: [] };
+        }
 
         const getLocalMidnight = (dateStr: string) => {
             return new Date(dateStr + 'T00:00:00').getTime();
@@ -137,11 +144,28 @@ function App() {
         const startMs = getLocalMidnight(startDate);
         const endMs = getLocalMidnight(endDate);
 
+        console.log('🔍 Date range (ms):', { startMs, endMs });
+        console.log('🔍 Date range (readable):', {
+            start: new Date(startMs).toISOString(),
+            end: new Date(endMs).toISOString()
+        });
+
         const main = data.filter(r => {
             const datePart = r.date.includes(' ') ? r.date.split(' ')[0] : r.date;
             const d = getLocalMidnight(datePart);
-            return d >= startMs && d <= endMs;
+            const isInRange = d >= startMs && d <= endMs;
+
+            if (!isInRange && data.indexOf(r) < 3) {
+                console.log(`🔍 Sample filtered out: date=${r.date}, datePart=${datePart}, ms=${d}, inRange=${isInRange}`);
+            }
+
+            return isInRange;
         });
+
+        console.log('🔍 Step 6: Filtered result:', main.length, 'records');
+        if (main.length > 0) {
+            console.log('🔍 First filtered record:', main[0]);
+        }
 
         if (compareMode) {
             const oneDay = 24 * 60 * 60 * 1000;
@@ -195,6 +219,8 @@ function App() {
     };
 
     const handleDataLoaded = (newData: RawAdRecord[]) => {
+        console.log('🔍 Step 4: handleDataLoaded called with:', newData.length, 'records');
+        console.log('🔍 Sample data:', newData.slice(0, 2));
         setData(newData);
     };
 
