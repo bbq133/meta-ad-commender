@@ -103,24 +103,40 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, configs, o
             console.log('🔍 First row columns:', Object.keys(results[0] || {}));
             console.log('🔍 First row sample:', results[0]);
 
-            const filtered = results.filter(row => row['Day'] || row['campaign_name']);
-            console.log('🔍 Step 2: After filter (Day or campaign_name):', filtered.length, 'rows');
+            // 支持多种列名格式: Day, day, Campaign name, campaign_name 等
+            const filtered = results.filter(row =>
+                row['Day'] || row['day'] || row['Campaign name'] || row['campaign_name']
+            );
+            console.log('🔍 Step 2: After filter (Day/day or Campaign name/campaign_name):', filtered.length, 'rows');
 
             const mappedData: RawAdRecord[] = filtered.map(row => ({
-                date: normalizeDate(row['Day'] || row['date'] || ''),
+                // 日期: Day, day, date
+                date: normalizeDate(row['Day'] || row['day'] || row['date'] || ''),
+                // 广告系列名: Campaign name, campaign_name
                 campaign_name: String(row['Campaign name'] || row['campaign_name'] || 'Unknown'),
+                // 广告组名: Ad set name, adset_name
                 adset_name: String(row['Ad set name'] || row['adset_name'] || 'Unknown'),
+                // 广告名: Ad name, ad_name
                 ad_name: String(row['Ad name'] || row['ad_name'] || 'Unknown'),
-                spend: parseFloat(row['Amount spent (USD)'] || row['spend'] || 0),
+                // 花费: Amount spent (USD), Cost, spend
+                spend: parseFloat(row['Amount spent (USD)'] || row['Cost'] || row['spend'] || 0),
+                // 展示次数: Impressions, impressions
                 impressions: parseInt(row['Impressions'] || row['impressions'] || 0),
+                // 链接点击: Link clicks, link_clicks
                 link_clicks: parseInt(row['Link clicks'] || row['link_clicks'] || 0),
-                purchases: parseInt(row['Purchases'] || row['purchases'] || 0),
-                purchase_value: parseFloat(row['Purchases conversion value'] || row['purchase_value'] || 0),
-                adds_to_cart: parseInt(row['Adds to cart'] || row['adds_to_cart'] || 0),
-                checkouts_initiated: parseInt(row['Checkouts initiated'] || row['checkouts_initiated'] || 0),
-                // 新增字段映射
-                landing_page_views: parseInt(row['Website landing page views'] || row['landing_page_views'] || 0),
+                // 购买次数: Purchases, Website purchases, purchases
+                purchases: parseInt(row['Purchases'] || row['Website purchases'] || row['purchases'] || 0),
+                // 购买金额: Purchases conversion value, Purchase conversion value, purchase_value
+                purchase_value: parseFloat(row['Purchases conversion value'] || row['Purchase conversion value'] || row['purchase_value'] || 0),
+                // 加购次数: Adds to cart, Website adds to cart, adds_to_cart
+                adds_to_cart: parseInt(row['Adds to cart'] || row['Website adds to cart'] || row['adds_to_cart'] || 0),
+                // 开始结账: Checkouts initiated, Website checkouts initiated, checkouts_initiated
+                checkouts_initiated: parseInt(row['Checkouts initiated'] || row['Website checkouts initiated'] || row['checkouts_initiated'] || 0),
+                // 落地页浏览: Website landing page views, Landing page views, landing_page_views
+                landing_page_views: parseInt(row['Website landing page views'] || row['Landing page views'] || row['landing_page_views'] || 0),
+                // 频次: Frequency, frequency
                 frequency: parseFloat(row['Frequency'] || row['frequency'] || 0),
+                // 覆盖人数: Reach, reach
                 reach: parseInt(row['Reach'] || row['reach'] || 0),
             }));
 
