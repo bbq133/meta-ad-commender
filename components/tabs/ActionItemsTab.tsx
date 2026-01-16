@@ -1169,168 +1169,170 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                 )}
                             </div>
 
-                            {/* AdSet 列表 */}
-                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
-                                    <h3 className="text-lg font-black text-slate-900">
-                                        👥 需要调整的人群 ({filteredBlResult.adSets.length})
-                                    </h3>
-                                </div>
-                                {filteredBlResult.adSets.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead className="bg-slate-50 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">AdSet Name</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                                                        onClick={() => handleAdSetSort('spend')}
-                                                    >
-                                                        <div className="flex items-center gap-1">
-                                                            Spend
-                                                            <SortIcon
-                                                                active={adSetSort.field === 'spend'}
-                                                                direction={adSetSort.direction}
-                                                            />
-                                                        </div>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                                                        onClick={() => handleAdSetSort('kpi')}
-                                                    >
-                                                        <div className="flex items-center gap-1">
-                                                            KPI 值
-                                                            <SortIcon
-                                                                active={adSetSort.field === 'kpi'}
-                                                                direction={adSetSort.direction}
-                                                            />
-                                                        </div>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedAdSets.map(adSet => {
-                                                    const isExpanded = blExpandedGuidance.has(adSet.id);
+                            {/* AdSet 列表 - 已隐藏 */}
+                            {false && (
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                        <h3 className="text-lg font-black text-slate-900">
+                                            👥 需要调整的人群 ({filteredBlResult.adSets.length})
+                                        </h3>
+                                    </div>
+                                    {filteredBlResult.adSets.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead className="bg-slate-50 border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">AdSet Name</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
+                                                        <th
+                                                            className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                            onClick={() => handleAdSetSort('spend')}
+                                                        >
+                                                            <div className="flex items-center gap-1">
+                                                                Spend
+                                                                <SortIcon
+                                                                    active={adSetSort.field === 'spend'}
+                                                                    direction={adSetSort.direction}
+                                                                />
+                                                            </div>
+                                                        </th>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
+                                                        <th
+                                                            className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                            onClick={() => handleAdSetSort('kpi')}
+                                                        >
+                                                            <div className="flex items-center gap-1">
+                                                                KPI 值
+                                                                <SortIcon
+                                                                    active={adSetSort.field === 'kpi'}
+                                                                    direction={adSetSort.direction}
+                                                                />
+                                                            </div>
+                                                        </th>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedAdSets.map(adSet => {
+                                                        const isExpanded = blExpandedGuidance.has(adSet.id);
 
-                                                    const metrics: CampaignMetrics = {
-                                                        spend: adSet.spend,
-                                                        roi: adSet.kpiType === 'ROI' ? adSet.actualValue : undefined,
-                                                        cpc: adSet.kpiType === 'CPC' ? adSet.actualValue : undefined,
-                                                        cpm: adSet.kpiType === 'CPM' ? adSet.actualValue : undefined,
-                                                        cvr: adSet.metrics?.cvr,
-                                                        aov: adSet.metrics?.aov,
-                                                        cpa: adSet.metrics?.cpa,
-                                                        cpatc: adSet.metrics?.cpatc,
-                                                        atc_rate: adSet.metrics?.atc_rate,
-                                                        ctr: adSet.metrics?.ctr,
-                                                        clicks: adSet.metrics?.clicks,
-                                                        impressions: adSet.metrics?.impressions,
-                                                        reach: adSet.metrics?.reach,
-                                                        frequency: adSet.metrics?.frequency,
-                                                    };
+                                                        const metrics: CampaignMetrics = {
+                                                            spend: adSet.spend,
+                                                            roi: adSet.kpiType === 'ROI' ? adSet.actualValue : undefined,
+                                                            cpc: adSet.kpiType === 'CPC' ? adSet.actualValue : undefined,
+                                                            cpm: adSet.kpiType === 'CPM' ? adSet.actualValue : undefined,
+                                                            cvr: adSet.metrics?.cvr,
+                                                            aov: adSet.metrics?.aov,
+                                                            cpa: adSet.metrics?.cpa,
+                                                            cpatc: adSet.metrics?.cpatc,
+                                                            atc_rate: adSet.metrics?.atc_rate,
+                                                            ctr: adSet.metrics?.ctr,
+                                                            clicks: adSet.metrics?.clicks,
+                                                            impressions: adSet.metrics?.impressions,
+                                                            reach: adSet.metrics?.reach,
+                                                            frequency: adSet.metrics?.frequency,
+                                                        };
 
-                                                    const avgMetrics: CampaignMetrics = {
-                                                        spend: adSet.avgSpend,
-                                                        roi: adSet.kpiType === 'ROI' ? adSet.avgValue : undefined,
-                                                        cpc: adSet.kpiType === 'CPC' ? adSet.avgValue : undefined,
-                                                        cpm: adSet.kpiType === 'CPM' ? adSet.avgValue : undefined,
-                                                        cvr: adSet.avgMetrics?.cvr,
-                                                        aov: adSet.avgMetrics?.aov,
-                                                        cpa: adSet.avgMetrics?.cpa,
-                                                        cpatc: adSet.avgMetrics?.cpatc,
-                                                        atc_rate: adSet.avgMetrics?.atc_rate,
-                                                        ctr: adSet.avgMetrics?.ctr,
-                                                        clicks: adSet.avgMetrics?.clicks,
-                                                        impressions: adSet.avgMetrics?.impressions,
-                                                        reach: adSet.avgMetrics?.reach,
-                                                        frequency: adSet.avgMetrics?.frequency,
-                                                    };
+                                                        const avgMetrics: CampaignMetrics = {
+                                                            spend: adSet.avgSpend,
+                                                            roi: adSet.kpiType === 'ROI' ? adSet.avgValue : undefined,
+                                                            cpc: adSet.kpiType === 'CPC' ? adSet.avgValue : undefined,
+                                                            cpm: adSet.kpiType === 'CPM' ? adSet.avgValue : undefined,
+                                                            cvr: adSet.avgMetrics?.cvr,
+                                                            aov: adSet.avgMetrics?.aov,
+                                                            cpa: adSet.avgMetrics?.cpa,
+                                                            cpatc: adSet.avgMetrics?.cpatc,
+                                                            atc_rate: adSet.avgMetrics?.atc_rate,
+                                                            ctr: adSet.avgMetrics?.ctr,
+                                                            clicks: adSet.avgMetrics?.clicks,
+                                                            impressions: adSet.avgMetrics?.impressions,
+                                                            reach: adSet.avgMetrics?.reach,
+                                                            frequency: adSet.avgMetrics?.frequency,
+                                                        };
 
-                                                    const guidance = getOptimizationGuidance('AdSet', adSet.kpiType, metrics, avgMetrics);
+                                                        const guidance = getOptimizationGuidance('AdSet', adSet.kpiType, metrics, avgMetrics);
 
-                                                    return (
-                                                        <React.Fragment key={adSet.id}>
-                                                            <tr className="border-b hover:bg-slate-50 transition-all">
-                                                                <td className="px-4 py-3 font-medium text-slate-900">{adSet.adSetName}</td>
-                                                                <td className="px-4 py-3 text-slate-600">{adSet.campaignName}</td>
-                                                                <td className="px-4 py-3 text-slate-600">{adSet.businessLine}</td>
-                                                                <td className="px-4 py-3">
-                                                                    <SpendDetailCell
-                                                                        spend={adSet.spend}
-                                                                        avgSpend={adSet.avgSpend}
-                                                                        lastSpend={adSet.lastSpend}
-                                                                    />
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    <KPIBadgeWithTarget
-                                                                        kpiType={adSet.kpiType}
-                                                                        targetValue={adSet.targetValue}
-                                                                    />
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    <KPIValueCell
-                                                                        actualValue={adSet.actualValue}
-                                                                        avgValue={adSet.avgValue}
-                                                                        lastValue={adSet.lastValue}
-                                                                        kpiType={adSet.kpiType}
-                                                                    />
-                                                                </td>
+                                                        return (
+                                                            <React.Fragment key={adSet.id}>
+                                                                <tr className="border-b hover:bg-slate-50 transition-all">
+                                                                    <td className="px-4 py-3 font-medium text-slate-900">{adSet.adSetName}</td>
+                                                                    <td className="px-4 py-3 text-slate-600">{adSet.campaignName}</td>
+                                                                    <td className="px-4 py-3 text-slate-600">{adSet.businessLine}</td>
+                                                                    <td className="px-4 py-3">
+                                                                        <SpendDetailCell
+                                                                            spend={adSet.spend}
+                                                                            avgSpend={adSet.avgSpend}
+                                                                            lastSpend={adSet.lastSpend}
+                                                                        />
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <KPIBadgeWithTarget
+                                                                            kpiType={adSet.kpiType}
+                                                                            targetValue={adSet.targetValue}
+                                                                        />
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <KPIValueCell
+                                                                            actualValue={adSet.actualValue}
+                                                                            avgValue={adSet.avgValue}
+                                                                            lastValue={adSet.lastValue}
+                                                                            kpiType={adSet.kpiType}
+                                                                        />
+                                                                    </td>
 
-                                                                <td className="px-4 py-3">
-                                                                    <button
-                                                                        onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, adSet.id)}
-                                                                        className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
-                                                                    >
-                                                                        {isExpanded ? (
-                                                                            <ChevronDown className="w-4 h-4 text-slate-500" />
-                                                                        ) : (
-                                                                            <ChevronRight className="w-4 h-4 text-slate-500" />
-                                                                        )}
-                                                                    </button>
-                                                                </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <button
+                                                                            onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, adSet.id)}
+                                                                            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+                                                                        >
+                                                                            {isExpanded ? (
+                                                                                <ChevronDown className="w-4 h-4 text-slate-500" />
+                                                                            ) : (
+                                                                                <ChevronRight className="w-4 h-4 text-slate-500" />
+                                                                            )}
+                                                                        </button>
+                                                                    </td>
 
-                                                                <td className="px-4 py-3">
-                                                                    <button
-                                                                        onClick={() => handleBlRemove(adSet.id)}
-                                                                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-all"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
-
-                                                            {isExpanded && (
-                                                                <tr className="bg-slate-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="px-4 py-4">
-                                                                        <div className="space-y-3 w-full">
-                                                                            <GuidanceDetailPanel
-                                                                                guidance={guidance}
-                                                                                metrics={metrics}
-                                                                                avgMetrics={avgMetrics}
-                                                                                kpiType={adSet.kpiType}
-                                                                                intermediateMetrics={adSet.metrics}
-                                                                                intermediateAvgMetrics={adSet.avgMetrics}
-                                                                                lastMetrics={adSet.lastMetrics}
-                                                                            />
-                                                                        </div>
+                                                                    <td className="px-4 py-3">
+                                                                        <button
+                                                                            onClick={() => handleBlRemove(adSet.id)}
+                                                                            className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-all"
+                                                                        >
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </button>
                                                                     </td>
                                                                 </tr>
-                                                            )}
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="p-8 text-center text-slate-500">暂无需要调整的人群</div>
-                                )}
-                            </div>
+
+                                                                {isExpanded && (
+                                                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                                                        <td colSpan={8} className="px-4 py-4">
+                                                                            <div className="space-y-3 w-full">
+                                                                                <GuidanceDetailPanel
+                                                                                    guidance={guidance}
+                                                                                    metrics={metrics}
+                                                                                    avgMetrics={avgMetrics}
+                                                                                    kpiType={adSet.kpiType}
+                                                                                    intermediateMetrics={adSet.metrics}
+                                                                                    intermediateAvgMetrics={adSet.avgMetrics}
+                                                                                    lastMetrics={adSet.lastMetrics}
+                                                                                />
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="p-8 text-center text-slate-500">暂无需要调整的人群</div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Ad 列表 */}
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
