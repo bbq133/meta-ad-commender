@@ -1,6 +1,7 @@
 import { RawAdRecord, AdConfiguration } from '../types';
 import { QuadrantThresholds } from './quadrantUtils';
 import { calculateBenchmarkROI, calculatePriority } from './priorityUtils';
+import { diagnoseAd, convertToAdDiagnosticDetail, AdDiagnosticContext } from './adDiagnostics';
 
 // Action Item 类型定义
 
@@ -98,6 +99,11 @@ export interface ActionAd {
     metrics?: IntermediateMetrics;
     avgMetrics?: IntermediateMetrics;
     lastMetrics?: IntermediateMetrics;
+
+    // Ad 诊断新增字段
+    diagnosticDetails?: import('./campaignDiagnostics').DiagnosticDetail[];
+    activeDays?: number;           // 上线天数
+    videoPlayRate3s?: number;      // 3秒播放率
 }
 
 export interface ActionItemsResult {
@@ -251,6 +257,49 @@ export const generateActionItems = (
     const campaigns: ActionCampaign[] = [];
     const adSets: ActionAdSet[] = [];
     const ads: ActionAd[] = [];
+
+    // ============ 全局 Ad 平均值计算 (用于 Ad 素材诊断) ============
+    // 按 Ad 分组计算全局平均值 (不受业务线配置限制)
+    const globalAdMap = new Map<string, { spend: number; revenue: number; clicks: number; impressions: number; videoPlays3s: number; reach: number }>();
+    data.forEach(r => {
+        const adKey = `${r.campaign_name}|${r.adset_name}|${r.ad_name}`;
+        if (!globalAdMap.has(adKey)) {
+            globalAdMap.set(adKey, { spend: 0, revenue: 0, clicks: 0, impressions: 0, videoPlays3s: 0, reach: 0 });
+        }
+        const current = globalAdMap.get(adKey)!;
+        current.spend += r.spend;
+        current.revenue += r.purchase_value;
+        current.clicks += r.link_clicks;
+        current.impressions += r.impressions;
+        current.videoPlays3s += r.video_plays_3s || 0;
+        current.reach += r.reach || 0;
+    });
+
+    // 计算每个 Ad 的指标
+    const adMetricsArray: { roi: number; ctr: number; videoPlayRate3s: number | undefined; frequency: number }[] = [];
+    globalAdMap.forEach(adData => {
+        if (adData.spend > 0) {  // 排除无花费的 Ad
+            const roi = adData.spend > 0 ? adData.revenue / adData.spend : 0;
+            const ctr = adData.impressions > 0 ? adData.clicks / adData.impressions : 0;
+            const videoPlayRate3s = adData.impressions > 0 ? adData.videoPlays3s / adData.impressions : undefined;
+            const frequency = adData.reach > 0 ? adData.impressions / adData.reach : 0;
+            adMetricsArray.push({ roi, ctr, videoPlayRate3s, frequency });
+        }
+    });
+
+    // 计算全局 Ad 平均值 (算术平均)
+    const globalAdCount = adMetricsArray.length;
+    const globalAdAvgRoi = globalAdCount > 0
+        ? adMetricsArray.reduce((sum, m) => sum + m.roi, 0) / globalAdCount
+        : 0;
+    const globalAdAvgCtr = globalAdCount > 0
+        ? adMetricsArray.reduce((sum, m) => sum + m.ctr, 0) / globalAdCount
+        : 0;
+    const validVideoPlayRates = adMetricsArray.filter(m => m.videoPlayRate3s !== undefined);
+    const globalAdAvgVideoPlayRate3s = validVideoPlayRates.length > 0
+        ? validVideoPlayRates.reduce((sum, m) => sum + (m.videoPlayRate3s || 0), 0) / validVideoPlayRates.length
+        : undefined;
+    // ============ 全局 Ad 平均值计算结束 ============
 
     // 遍历每个业务线配置
     configs.forEach(config => {
@@ -459,72 +508,132 @@ export const generateActionItems = (
                         });
                     }
 
-                    // 处理该 AdSet 下的 Ad
-                    const adMap = new Map<string, RawAdRecord[]>();
-                    adSetRecords.forEach(r => {
-                        if (!adMap.has(r.ad_name)) adMap.set(r.ad_name, []);
-                        adMap.get(r.ad_name)!.push(r);
-                    });
+                    // 注意：Ad 的处理逻辑已移到下方独立处理，不再依赖 AdSet 的筛选结果
+                });
+            }
+        });
 
-                    adMap.forEach((adRecords, adName) => {
-                        const adSpend = adRecords.reduce((sum, r) => sum + r.spend, 0);
-                        const adKPI = calculateKPI(adRecords, kpiType);
+        // ============ 独立处理 Ad 列表（解耦自 Campaign/AdSet）============
+        // Ad 的筛选只与日期范围相关，不依赖 Campaign 象限和 AdSet 的 KPI 判断
+        // 中间指标与 Campaign 的中间指标保持一致（使用业务线级别的 avgMetrics）
 
-                        // 计算Ad的中间指标
-                        const adMetrics = calculateMetrics(adRecords);
+        // 按 Ad 分组（直接从业务线匹配数据遍历，不经过 Campaign/AdSet 过滤）
+        const adGroupMap = new Map<string, { campaignName: string; adSetName: string; records: RawAdRecord[] }>();
+        matchingData.forEach(r => {
+            const adKey = `${r.campaign_name}|${r.adset_name}|${r.ad_name}`;
+            if (!adGroupMap.has(adKey)) {
+                adGroupMap.set(adKey, {
+                    campaignName: r.campaign_name,
+                    adSetName: r.adset_name,
+                    records: []
+                });
+            }
+            adGroupMap.get(adKey)!.records.push(r);
+        });
 
-                        // 计算对比周期的 Spend
-                        const adLastSpend = getComparisonSpend(
-                            comparisonData,
-                            config,
-                            r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName
-                        );
+        // 遍历每个 Ad
+        adGroupMap.forEach(({ campaignName, adSetName, records: adRecords }, adKey) => {
+            const adName = adRecords[0].ad_name;
+            const adSpend = adRecords.reduce((sum, r) => sum + r.spend, 0);
+            const adKPI = calculateKPI(adRecords, kpiType);
 
-                        // 计算对比周期的 KPI 值
-                        const adLastValue = getComparisonKPI(
-                            comparisonData,
-                            config,
-                            r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName,
-                            kpiType
-                        );
+            // 计算 Ad 的中间指标
+            const adMetrics = calculateMetrics(adRecords);
 
-                        // 计算对比周期的中间指标
-                        const adLastMetrics = getComparisonMetrics(
-                            comparisonData,
-                            config,
-                            r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName
-                        );
+            // 计算对比周期的 Spend
+            const adLastSpend = getComparisonSpend(
+                comparisonData,
+                config,
+                r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName
+            );
 
-                        // 判断是否低于平均 KPI
-                        const isAdBelowAvg = kpiType === 'ROI'
-                            ? adKPI < avgKPI
-                            : adKPI > avgKPI;
+            // 计算对比周期的 KPI 值
+            const adLastValue = getComparisonKPI(
+                comparisonData,
+                config,
+                r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName,
+                kpiType
+            );
 
-                        if (isAdBelowAvg) {
-                            ads.push({
-                                id: `ad-${adName}-${businessLineId}`,
-                                adName,
-                                adSetName,
-                                campaignName,
-                                businessLine,
-                                businessLineId,
-                                spend: adSpend,
-                                avgSpend: avgBusinessLineSpend,
-                                lastSpend: adLastSpend,
-                                kpiType,
-                                targetValue,
-                                actualValue: adKPI,
-                                gapPercentage: calculateGapPercentage(adKPI, targetValue),
-                                avgValue: avgKPI,
-                                lastValue: adLastValue,
-                                vsAvgPercentage: calculateGapPercentage(adKPI, avgKPI),
-                                // 中间指标
-                                metrics: adMetrics,
-                                avgMetrics: avgMetrics,
-                                lastMetrics: adLastMetrics,
-                            });
-                        }
-                    });
+            // 计算对比周期的中间指标
+            const adLastMetrics = getComparisonMetrics(
+                comparisonData,
+                config,
+                r => r.campaign_name === campaignName && r.adset_name === adSetName && r.ad_name === adName
+            );
+
+            // 判断是否低于平均 KPI（使用业务线级别的平均值）
+            const isAdBelowAvg = kpiType === 'ROI'
+                ? adKPI < avgKPI
+                : adKPI > avgKPI;
+
+            if (isAdBelowAvg) {
+                // 计算 Ad 诊断所需的上下文
+                const adDates = adRecords
+                    .filter(r => r.spend > 0)
+                    .map(r => new Date(r.date))
+                    .sort((a, b) => a.getTime() - b.getTime());
+                const firstSpendDate = adDates.length > 0 ? adDates[0] : new Date();
+                const activeDays = Math.ceil((new Date().getTime() - firstSpendDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+                // 计算 3秒播放率
+                const totalVideoPlays3s = adRecords.reduce((sum, r) => sum + (r.video_plays_3s || 0), 0);
+                const totalImpressions = adRecords.reduce((sum, r) => sum + r.impressions, 0);
+                const videoPlayRate3s = totalImpressions > 0 ? totalVideoPlays3s / totalImpressions : undefined;
+
+                // 计算当前 Ad 的 CTR (小数格式)
+                const adCtr = totalImpressions > 0 ? adRecords.reduce((sum, r) => sum + r.link_clicks, 0) / totalImpressions : 0;
+
+                // 计算当前 Ad 的 Frequency
+                const totalReach = adRecords.reduce((sum, r) => sum + (r.reach || 0), 0);
+                const adFrequency = totalReach > 0 ? totalImpressions / totalReach : 0;
+
+                // 构建诊断上下文 - 使用全局 Ad 平均值 (不受业务线限制)
+                const diagContext: AdDiagnosticContext = {
+                    spend: adSpend,
+                    roi: kpiType === 'ROI' ? adKPI : 0,
+                    avgRoi: globalAdAvgRoi,  // 使用全局 Ad 平均 ROI
+                    ctr: adCtr,              // 使用直接计算的 CTR (小数格式)
+                    avgCtr: globalAdAvgCtr,  // 使用全局 Ad 平均 CTR
+                    frequency: adFrequency,  // 使用直接计算的 Frequency
+                    activeDays,
+                    videoPlayRate3s,
+                    avgVideoPlayRate3s: globalAdAvgVideoPlayRate3s  // 使用全局 Ad 平均 3秒播放率
+                };
+
+                // 执行诊断
+                const diagResult = diagnoseAd(diagContext);
+                let diagnosticDetails: import('./campaignDiagnostics').DiagnosticDetail[] | undefined;
+                if (diagResult) {
+                    const diagDetail = convertToAdDiagnosticDetail(diagResult, diagContext);
+                    diagnosticDetails = [diagDetail];
+                }
+
+                ads.push({
+                    id: `ad-${adName}-${businessLineId}`,
+                    adName,
+                    adSetName,
+                    campaignName,
+                    businessLine,
+                    businessLineId,
+                    spend: adSpend,
+                    avgSpend: avgBusinessLineSpend,
+                    lastSpend: adLastSpend,
+                    kpiType,
+                    targetValue,
+                    actualValue: adKPI,
+                    gapPercentage: calculateGapPercentage(adKPI, targetValue),
+                    avgValue: avgKPI,
+                    lastValue: adLastValue,
+                    vsAvgPercentage: calculateGapPercentage(adKPI, avgKPI),
+                    // 中间指标 - 与 Campaign 保持一致，使用业务线级别的 avgMetrics
+                    metrics: adMetrics,
+                    avgMetrics: avgMetrics,
+                    lastMetrics: adLastMetrics,
+                    // Ad 诊断新增字段
+                    diagnosticDetails,
+                    activeDays,
+                    videoPlayRate3s,
                 });
             }
         });

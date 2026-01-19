@@ -184,6 +184,145 @@ ${diagDetailsText}
             suggestions
         };
     }
+
+    /**
+     * 批量总结 Campaign 诊断（归因诊断 + Action）
+     */
+    async summarizeCampaignDiagnostics(
+        campaigns: Array<{ id: string; campaignName: string; diagnostics: DiagnosticDetail[] }>
+    ): Promise<Map<string, { attribution: string; action: string }>> {
+        // 构建批量 Prompt
+        const campaignsData = campaigns.map((c, i) => {
+            const diagText = c.diagnostics.map(d =>
+                `  - 场景: ${d.scenario}\n    诊断: ${d.diagnosis}\n    建议: ${d.action}`
+            ).join('\n');
+
+            return `Campaign ${i + 1} (ID: ${c.id})
+名称: ${c.campaignName.substring(0, 50)}${c.campaignName.length > 50 ? '...' : ''}
+诊断详情:
+${diagText}`;
+        }).join('\n\n---\n\n');
+
+        const prompt = `你是Meta广告优化专家。请为以下每个Campaign生成归因诊断总结和Action总结。
+
+${campaignsData}
+
+要求：
+1. 为每个Campaign分别生成归因诊断和Action总结
+2. **归因诊断**：用"疑似："开头，简洁总结主要问题和原因，不超过50字
+   - 格式示例：疑似：开头流失 (素材前3秒不抓人)\n疑似：受众/竞价问题 (买贵了)
+   - 每个问题单独一行，使用 \n 换行分隔
+3. **Action总结**：提炼关键执行步骤，使用编号列表，不超过80字
+   - 格式示例：1. 查：后台 3s播放率\n2. 动：若 <20%，保留受众，仅重做视频前3秒
+4. 严格按JSON格式输出
+
+输出格式（必须严格遵守）：
+\`\`\`json
+{
+  "campaign_id_1": {
+    "attribution": "疑似：问题1 (原因1)、问题2 (原因2)",
+    "action": "1. 查：xxx\\n2. 动：xxx"
+  },
+  "campaign_id_2": {
+    "attribution": "疑似：...",
+    "action": "1. 查：...\\n2. 动：..."
+  }
+}
+\`\`\`
+
+请直接输出JSON，不要有任何其他文字。`;
+
+        try {
+            const result = await this.model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
+
+            return this.parseCampaignSummaries(text, campaigns);
+        } catch (error) {
+            console.error('Gemini API error in summarizeCampaignDiagnostics:', error);
+            // 降级：返回空 Map
+            return new Map();
+        }
+    }
+
+    /**
+     * 解析 Campaign 总结响应
+     */
+    private parseCampaignSummaries(
+        text: string,
+        campaigns: Array<{ id: string; diagnostics: DiagnosticDetail[] }>
+    ): Map<string, { attribution: string; action: string }> {
+        try {
+            // 清理响应文本
+            let cleanText = text.trim();
+            cleanText = cleanText.replace(/```json\s*/gi, '');
+            cleanText = cleanText.replace(/```\s*/g, '');
+            cleanText = cleanText.trim();
+
+            const parsed = JSON.parse(cleanText);
+            const summaries = new Map<string, { attribution: string; action: string }>();
+
+            // 将解析结果转换为 Map
+            Object.entries(parsed).forEach(([id, value]: [string, any]) => {
+                if (value && typeof value === 'object') {
+                    summaries.set(id, {
+                        attribution: value.attribution || '-',
+                        action: value.action || '-'
+                    });
+                }
+            });
+
+            return summaries;
+        } catch (error) {
+            console.error('Failed to parse campaign summaries:', error);
+            console.log('Raw response:', text);
+
+            // 降级：使用简单文本拼接
+            return this.generateFallbackCampaignSummaries(campaigns);
+        }
+    }
+
+    /**
+     * 生成降级的 Campaign 总结
+     */
+    private generateFallbackCampaignSummaries(
+        campaigns: Array<{ id: string; diagnostics: DiagnosticDetail[] }>
+    ): Map<string, { attribution: string; action: string }> {
+        const summaries = new Map<string, { attribution: string; action: string }>();
+
+        campaigns.forEach(c => {
+            if (c.diagnostics.length === 0) {
+                summaries.set(c.id, { attribution: '-', action: '-' });
+                return;
+            }
+
+            // 归因诊断拼接
+            const attribution = c.diagnostics
+                .map(d => {
+                    const scenarioName = d.scenario || '';
+                    const diagnosisPart = d.diagnosis?.split('：')[1] || d.diagnosis || '';
+                    return scenarioName && diagnosisPart
+                        ? `疑似：${scenarioName} (${diagnosisPart.substring(0, 20)}...)`
+                        : '';
+                })
+                .filter(Boolean)
+                .join('、') || '-';
+
+            // Action 拼接
+            const action = c.diagnostics
+                .map(d => {
+                    if (!d.action) return '';
+                    const lines = d.action.split('\n').filter(l => l.trim());
+                    return lines.slice(0, 3).join('\n');
+                })
+                .filter(Boolean)
+                .join('\n---\n') || '-';
+
+            summaries.set(c.id, { attribution, action });
+        });
+
+        return summaries;
+    }
 }
 
 /**

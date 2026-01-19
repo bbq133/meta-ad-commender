@@ -15,6 +15,7 @@ export interface RawAdRecord {
   reach?: number;  // 触达人数（用于 CPM 类型）
   landing_page_views?: number;  // 落地页浏览量（用于 Click-to-PV Rate 计算）
   frequency?: number;  // 广告展示频次（用于场景6诊断）
+  video_plays_3s?: number;  // 3秒视频播放次数（用于素材诊断-开头流失场景）
 }
 
 // 聚合指标

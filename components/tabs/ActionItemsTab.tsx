@@ -22,6 +22,7 @@ import { calculateBenchmarks, CampaignBenchmarks } from '../../utils/benchmarkCa
 import { calculateL3DL7DROI } from '../../utils/trendCalculator';
 import { AIDiagnosticPanel, AIDiagnosticPanelRef } from './AIDiagnosticPanel';
 import { DiagnosticDetail } from '../../utils/aiSummaryUtils';
+import { useConfig } from '../../contexts/ConfigContext';
 
 interface ActionItemsTabProps {
     data: RawAdRecord[];
@@ -298,6 +299,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     businessLineThresholds,
     comparisonData
 }, ref) => {
+    // 从 Google Sheet 获取配置
+    const { config } = useConfig();
     const [activeSubTab, setActiveSubTab] = useState<'businessLine' | 'newAudience'>('businessLine');
     const [blResult, setBlResult] = useState<ActionItemsResult | null>(null);
     const [naResult, setNaResult] = useState<NewAudienceActionItemsResult | null>(null);
@@ -317,11 +320,18 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     const [naBusinessLineFilter, setNaBusinessLineFilter] = useState<string>('all'); // 'all' or businessLineId
     const [blPriorityFilter, setBlPriorityFilter] = useState<'all' | 'P0' | 'P1'>('all'); // Priority filter for Business Line
 
+    // 素材专用筛选状态 (独立于 Campaign/AdSet 筛选)
+    const [adBusinessLineFilter, setAdBusinessLineFilter] = useState<string>('all');
+    const [adPriorityFilter, setAdPriorityFilter] = useState<'all' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6'>('all');
+
     // 调优指导展开状态
     const [blExpandedGuidance, setBlExpandedGuidance] = useState<Set<string>>(new Set());
 
     // AI诊断数据Map (campaignId -> diagnosticDetails)
     const [diagnosticsMap, setDiagnosticsMap] = useState<Map<string, DiagnosticDetail[]>>(new Map());
+
+    // Campaign AI 总结 (campaignId -> {attribution, action})
+    const [campaignAiSummaries, setCampaignAiSummaries] = useState<Map<string, { attribution: string; action: string }>>(new Map());
 
     // AI诊断面板 ref
     const aiDiagnosticRef = useRef<AIDiagnosticPanelRef>(null);
@@ -348,14 +358,14 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
         let adSets = blResult.adSets.filter(a => !blRemovedIds.has(a.id));
         let ads = blResult.ads.filter(a => !blRemovedIds.has(a.id));
 
-        // Filter by business line
+        // Filter by business line (仅影响 Campaign 和 AdSet,不影响 Ads)
         if (blBusinessLineFilter !== 'all') {
             campaigns = campaigns.filter(c => c.businessLineId === blBusinessLineFilter);
             adSets = adSets.filter(a => a.businessLineId === blBusinessLineFilter);
-            ads = ads.filter(a => a.businessLineId === blBusinessLineFilter);
+            // ads 不受此筛选影响,使用独立筛选
         }
 
-        // Filter by search text - search by campaign name and show related items
+        // Filter by search text - search by campaign name and show related items (仅影响 Campaign 和 AdSet)
         if (blSearchText) {
             const lowerSearch = blSearchText.toLowerCase();
 
@@ -363,10 +373,10 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             const matchingCampaigns = campaigns.filter(c => c.campaignName.toLowerCase().includes(lowerSearch));
             const matchingCampaignNames = new Set(matchingCampaigns.map(c => c.campaignName));
 
-            // Filter adSets and ads that belong to matching campaigns
+            // Filter adSets that belong to matching campaigns
             campaigns = matchingCampaigns;
             adSets = adSets.filter(a => matchingCampaignNames.has(a.campaignName));
-            ads = ads.filter(a => matchingCampaignNames.has(a.campaignName));
+            // ads 不受此筛选影响,使用独立筛选
         }
 
         // Filter by priority (only affects ROI campaigns)
@@ -410,6 +420,26 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             return { campaigns, adSets, ads };
         }
     }, [blResult, blRemovedIds, blFilterLevel, blSearchText, blBusinessLineFilter, blPriorityFilter]);
+
+    // 素材专用筛选逻辑 (独立于 Campaign/AdSet 筛选)
+    const filteredAds = useMemo(() => {
+        if (!filteredBlResult) return [];
+
+        let ads = [...filteredBlResult.ads];
+
+        // 业务线筛选
+        if (adBusinessLineFilter !== 'all') {
+            ads = ads.filter(ad => ad.businessLineId === adBusinessLineFilter);
+        }
+
+        // 优先级筛选
+        if (adPriorityFilter !== 'all') {
+            const priorityNum = parseInt(adPriorityFilter.substring(1)); // 'P1' -> 1
+            ads = ads.filter(ad => ad.diagnosticDetails?.[0]?.priority === priorityNum);
+        }
+
+        return ads;
+    }, [filteredBlResult, adBusinessLineFilter, adPriorityFilter]);
 
     // 过滤已删除的项目 - New Audience
     const filteredNaResult = useMemo(() => {
@@ -533,14 +563,13 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     }, [filteredBlResult, adSetSort]);
 
     const sortedAds = useMemo(() => {
-        if (!filteredBlResult) return [];
-        const items = [...filteredBlResult.ads];
+        const items = [...filteredAds];
         return items.sort((a, b) => {
             const aValue = adSort.field === 'spend' ? a.spend : a.actualValue;
             const bValue = adSort.field === 'spend' ? b.spend : b.actualValue;
             return adSort.direction === 'asc' ? aValue - bValue : bValue - aValue;
         });
-    }, [filteredBlResult, adSort]);
+    }, [filteredAds, adSort]);
 
     // 预计算所有Campaign的诊断数据（用于AI诊断面板）
     const campaignDiagnosticsData = useMemo(() => {
@@ -625,6 +654,32 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
             setTimeout(() => {
                 aiDiagnosticRef.current?.generate();
             }, 500);
+
+            // 批量生成 Campaign AI 总结
+            setTimeout(async () => {
+                if (blActionResult.campaigns.length > 0 && config?.system.geminiApiKey) {
+                    try {
+                        const { createGeminiService } = await import('../../services/geminiService');
+                        const geminiService = createGeminiService(config.system.geminiApiKey);
+
+                        // 准备批量数据
+                        const campaignsData = blActionResult.campaigns.map(c => ({
+                            id: c.id,
+                            campaignName: c.campaignName,
+                            diagnostics: campaignDiagnosticsData.get(c.id) || []
+                        })).filter(c => c.diagnostics.length > 0);
+
+                        if (campaignsData.length > 0) {
+                            console.log('🤖 正在生成 Campaign AI 总结...', campaignsData.length, '个 Campaign');
+                            const summaries = await geminiService.summarizeCampaignDiagnostics(campaignsData);
+                            setCampaignAiSummaries(summaries);
+                            console.log('✅ Campaign AI 总结生成完成', summaries.size, '个');
+                        }
+                    } catch (error) {
+                        console.error('⚠️ Campaign AI 总结生成失败:', error);
+                    }
+                }
+            }, 1000);
         }, 500);
     };
 
@@ -758,25 +813,142 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                 diagnosticsMap={diagnosticsMap}
                             />
 
-                            {/* 统计说明 */}
-                            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-start gap-3">
-                                <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <div className="text-sm text-blue-800">
-                                    <div className="font-bold mb-1">统计说明：</div>
-                                    <ul className="space-y-0.5 text-blue-700">
-                                        <li>• 需调整 Campaign：位于「观察区」或「问题区」的 Campaign（基于 Business Line 中调整的阈值）</li>
-                                        <li>• 需调整人群：上述 Campaign 中，KPI 值低于业务线平均值的 Ad Set</li>
-                                        <li>• 需调整素材：上述 Campaign 中，KPI 值低于业务线平均值的 Ad</li>
-                                        <li>• 优先级判定（仅 ROI 类型）：
-                                            <ul className="ml-4 mt-0.5 space-y-0.5">
-                                                <li>- 🔴 P0：ROI \u003c Benchmark × 80%（低于基准 20% 以上），先立刻下调 20% 预算</li>
-                                                <li>- 🟡 P1：Benchmark × 80% ≤ ROI ≤ Benchmark（低于基准 0-20%），进入下一步诊断和优化，预算保持观察</li>
-                                            </ul>
-                                        </li>
-                                        <li>• 数据范围：{dateRange.start} - {dateRange.end}</li>
-                                    </ul>
+                            {/* Campaign 层级的 AI 总结表格 */}
+                            {filteredBlResult && filteredBlResult.campaigns.length > 0 && (
+                                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                        <h3 className="text-lg font-black text-slate-900">
+                                            📊 Campaign 层级的 AI 总结
+                                        </h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-slate-50 border-b border-slate-200">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign 名称</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI 现状</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign 消耗</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">预算建议</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">异常数据</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">归因诊断</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredBlResult.campaigns.map((campaign, idx) => {
+                                                    // 获取诊断详情
+                                                    const diagnosticDetails = diagnosticsMap.get(campaign.id) || [];
+
+                                                    // 预算建议
+                                                    const budgetAdvice = campaign.priority === 'P0'
+                                                        ? { text: '下调20%', color: 'bg-red-100 text-red-700', icon: '🔴' }
+                                                        : campaign.priority === 'P1'
+                                                            ? { text: '保持观察', color: 'bg-yellow-100 text-yellow-700', icon: '🟡' }
+                                                            : { text: '-', color: 'bg-slate-100 text-slate-500', icon: '' };
+
+                                                    // 异常数据提取
+                                                    const abnormalData = diagnosticDetails
+                                                        .flatMap(d => d.steps || [])
+                                                        .filter(step => step.stepNumber === 0 || step.stepName?.includes('判定'))
+                                                        .map(step => step.content?.description || step.content?.condition)
+                                                        .filter(Boolean)
+                                                        .slice(0, 3); // 最多显示3条
+
+                                                    // 归因诊断拼接
+                                                    const attributionSummary = diagnosticDetails
+                                                        .map(d => {
+                                                            const scenarioName = d.scenario || '';
+                                                            const diagnosisPart = d.diagnosis?.split('：')[1] || d.diagnosis || '';
+                                                            return scenarioName && diagnosisPart
+                                                                ? `疑似：${scenarioName} (${diagnosisPart.substring(0, 20)}...)`
+                                                                : '';
+                                                        })
+                                                        .filter(Boolean)
+                                                        .join('、') || '-';
+
+                                                    // Action 拼接
+                                                    const actionSummary = diagnosticDetails
+                                                        .map(d => {
+                                                            if (!d.action) return '';
+                                                            const lines = d.action.split('\n').filter(l => l.trim());
+                                                            return lines.slice(0, 3).join('\n'); // 每个诊断取前3行
+                                                        })
+                                                        .filter(Boolean)
+                                                        .join('\n---\n') || '-';
+
+                                                    return (
+                                                        <tr key={campaign.id} className="border-b hover:bg-slate-50 transition-all h-24">
+                                                            {/* Campaign 名称 */}
+                                                            <td className="px-4 py-3 font-medium text-slate-900">
+                                                                <div className="truncate max-w-[200px]" title={campaign.campaignName}>
+                                                                    {campaign.campaignName}
+                                                                </div>
+                                                            </td>
+
+                                                            {/* KPI 现状 */}
+                                                            <td className="px-4 py-3">
+                                                                <div className="text-sm">
+                                                                    <span className="font-bold text-slate-900">
+                                                                        {formatKPI(campaign.actualValue, campaign.kpiType)}
+                                                                    </span>
+                                                                    <span className="text-slate-500"> / </span>
+                                                                    <span className="text-slate-600">
+                                                                        {formatKPI(campaign.avgValue, campaign.kpiType)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs text-slate-500">
+                                                                    实际 / Benchmark
+                                                                </div>
+                                                            </td>
+
+                                                            {/* Campaign 消耗 */}
+                                                            <td className="px-4 py-3 font-medium text-slate-900">
+                                                                ${campaign.spend.toFixed(2)}
+                                                            </td>
+
+                                                            {/* 预算建议 */}
+                                                            <td className="px-4 py-3">
+                                                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${budgetAdvice.color}`}>
+                                                                    {budgetAdvice.icon} {budgetAdvice.text}
+                                                                </span>
+                                                            </td>
+
+                                                            {/* 异常数据 */}
+                                                            <td className="px-4 py-3">
+                                                                <div className="text-xs text-slate-700 space-y-1">
+                                                                    {abnormalData.length > 0 ? (
+                                                                        abnormalData.map((item, i) => (
+                                                                            <div key={i} className="truncate max-w-[200px]" title={item}>
+                                                                                {item}
+                                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <span className="text-slate-400">-</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+
+                                                            {/* 归因诊断 - 使用 AI 总结 */}
+                                                            <td className="px-4 py-3">
+                                                                <div className="text-sm text-slate-700 max-w-[250px] max-h-16 overflow-y-auto whitespace-pre-line">
+                                                                    {(campaignAiSummaries.get(campaign.id)?.attribution || attributionSummary).replace(/、/g, '\n')}
+                                                                </div>
+                                                            </td>
+
+                                                            {/* Action - 使用 AI 总结 */}
+                                                            <td className="px-4 py-3">
+                                                                <div className="text-xs text-slate-700 whitespace-pre-line max-w-[300px] max-h-16 overflow-y-auto">
+                                                                    {campaignAiSummaries.get(campaign.id)?.action || actionSummary}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Filter Controls - 分组布局 */}
                             <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
@@ -1338,10 +1510,53 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                 <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
                                     <h3 className="text-lg font-black text-slate-900">
-                                        🎨 需要调整的素材 ({filteredBlResult.ads.length})
+                                        🎨 需要调整的素材 ({filteredAds.length})
                                     </h3>
                                 </div>
-                                {filteredBlResult.ads.length > 0 ? (
+
+                                {/* 素材专用筛选控件 */}
+                                <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+                                    <div className="flex items-center gap-4">
+                                        {/* 业务线筛选 */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-slate-700">业务线:</span>
+                                            <select
+                                                value={adBusinessLineFilter}
+                                                onChange={(e) => setAdBusinessLineFilter(e.target.value)}
+                                                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            >
+                                                <option value="all">全部</option>
+                                                {configs.map(config => (
+                                                    <option key={config.id} value={config.id}>
+                                                        {config.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* 分隔符 */}
+                                        <div className="h-6 w-px bg-slate-300"></div>
+
+                                        {/* 优先级筛选 */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-slate-700">优先级:</span>
+                                            <select
+                                                value={adPriorityFilter}
+                                                onChange={(e) => setAdPriorityFilter(e.target.value as any)}
+                                                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            >
+                                                <option value="all">全部</option>
+                                                <option value="P1">P1 - 僵尸素材</option>
+                                                <option value="P2">P2 - 开头流失</option>
+                                                <option value="P3">P3 - 点击欺诈</option>
+                                                <option value="P4">P4 - 爆款素材</option>
+                                                <option value="P5">P5 - 素材疲劳</option>
+                                                <option value="P6">P6 - 潜力/观察</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                {filteredAds.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="w-full">
                                             <thead className="bg-slate-50 border-b border-slate-200">
@@ -1375,6 +1590,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             />
                                                         </div>
                                                     </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">优先级</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
                                                     <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
                                                 </tr>
@@ -1417,7 +1633,9 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                         frequency: ad.avgMetrics?.frequency,
                                                     };
 
-                                                    const guidance = getOptimizationGuidance('Ad', ad.kpiType, metrics, avgMetrics);
+                                                    // 从诊断详情步骤3获取 Action 建议,如果有的话
+                                                    const diagAction = ad.diagnosticDetails?.[0]?.action;
+                                                    const guidance = diagAction || getOptimizationGuidance('Ad', ad.kpiType, metrics, avgMetrics);
 
                                                     return (
                                                         <React.Fragment key={`${ad.campaignName}-${ad.adSetName}-${ad.adName}-${adIndex}`}>
@@ -1446,6 +1664,22 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                         lastValue={ad.lastValue}
                                                                         kpiType={ad.kpiType}
                                                                     />
+                                                                </td>
+
+                                                                {/* 优先级列 */}
+                                                                <td className="px-4 py-3">
+                                                                    {ad.diagnosticDetails?.[0]?.priority ? (
+                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${ad.diagnosticDetails[0].priority <= 2
+                                                                            ? 'bg-red-100 text-red-700'
+                                                                            : ad.diagnosticDetails[0].priority <= 4
+                                                                                ? 'bg-yellow-100 text-yellow-700'
+                                                                                : 'bg-green-100 text-green-700'
+                                                                            }`}>
+                                                                            P{ad.diagnosticDetails[0].priority}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400 text-xs">-</span>
+                                                                    )}
                                                                 </td>
 
                                                                 <td className="px-4 py-3">
@@ -1483,6 +1717,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                                                 intermediateMetrics={ad.metrics}
                                                                                 intermediateAvgMetrics={ad.avgMetrics}
                                                                                 lastMetrics={ad.lastMetrics}
+                                                                                diagnosticDetails={ad.diagnosticDetails}
                                                                             />
                                                                         </div>
                                                                     </td>
