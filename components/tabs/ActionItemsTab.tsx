@@ -327,6 +327,9 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     // 调优指导展开状态
     const [blExpandedGuidance, setBlExpandedGuidance] = useState<Set<string>>(new Set());
 
+    // Campaign 表格展开/收起状态 (默认收起)
+    const [isCampaignTableExpanded, setIsCampaignTableExpanded] = useState(false);
+
     // AI诊断数据Map (campaignId -> diagnosticDetails)
     const [diagnosticsMap, setDiagnosticsMap] = useState<Map<string, DiagnosticDetail[]>>(new Map());
 
@@ -1037,307 +1040,321 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
 
                             {/* Campaign 列表 */}
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                <div
+                                    className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors"
+                                    onClick={() => setIsCampaignTableExpanded(!isCampaignTableExpanded)}
+                                >
                                     <h3 className="text-lg font-black text-slate-900">
                                         📋 需要调整的 Campaign ({filteredBlResult.campaigns.length})
                                     </h3>
+                                    <button className="text-slate-600 hover:text-slate-900 transition-colors">
+                                        {isCampaignTableExpanded ? (
+                                            <ChevronDown className="w-5 h-5" />
+                                        ) : (
+                                            <ChevronRight className="w-5 h-5" />
+                                        )}
+                                    </button>
                                 </div>
-                                {filteredBlResult.campaigns.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead className="bg-slate-50 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign Name</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                                                        onClick={() => handleCampaignSort('spend')}
-                                                    >
-                                                        <div className="flex items-center gap-1">
-                                                            Spend
-                                                            <SortIcon
-                                                                active={campaignSort.field === 'spend'}
-                                                                direction={campaignSort.direction}
-                                                            />
-                                                        </div>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
-                                                    <th
-                                                        className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
-                                                        onClick={() => handleCampaignSort('kpi')}
-                                                    >
-                                                        <div className="flex items-center gap-1">
-                                                            KPI 值
-                                                            <SortIcon
-                                                                active={campaignSort.field === 'kpi'}
-                                                                direction={campaignSort.direction}
-                                                            />
-                                                        </div>
-                                                    </th>
-                                                    <th className="px-4 py-3 text-center text-xs font-black text-slate-700 uppercase w-20">优先级</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedCampaigns.map(campaign => {
-                                                    const isExpanded = blExpandedGuidance.has(campaign.id);
-
-                                                    const metrics: CampaignMetrics = {
-                                                        spend: campaign.spend,
-                                                        roi: campaign.kpiType === 'ROI' ? campaign.actualValue : undefined,
-                                                        cpc: campaign.kpiType === 'CPC' ? campaign.actualValue : undefined,
-                                                        cpm: campaign.kpiType === 'CPM' ? campaign.actualValue : undefined,
-                                                        cvr: campaign.metrics?.cvr,
-                                                        aov: campaign.metrics?.aov,
-                                                        cpa: campaign.metrics?.cpa,
-                                                        cpatc: campaign.metrics?.cpatc,
-                                                        atc_rate: campaign.metrics?.atc_rate,
-                                                        ctr: campaign.metrics?.ctr,
-                                                        clicks: campaign.metrics?.clicks,
-                                                        impressions: campaign.metrics?.impressions,
-                                                        reach: campaign.metrics?.reach,
-                                                        frequency: campaign.metrics?.frequency,
-                                                        // 添加原始数据字段用于公式计算
-                                                        link_clicks: campaign.metrics?.clicks || 0,
-                                                        landing_page_views: campaign.metrics?.landing_page_views || 0,
-                                                        purchases: campaign.metrics?.purchases || 0,
-                                                        adds_to_cart: campaign.metrics?.adds_to_cart || 0,
-                                                        checkouts_initiated: campaign.metrics?.checkouts_initiated || 0,
-                                                        purchase_value: campaign.metrics?.purchase_value || 0,
-                                                    };
-
-                                                    const avgMetrics: CampaignMetrics = {
-                                                        spend: campaign.avgSpend,
-                                                        roi: campaign.kpiType === 'ROI' ? campaign.avgValue : undefined,
-                                                        cpc: campaign.kpiType === 'CPC' ? campaign.avgValue : undefined,
-                                                        cpm: campaign.kpiType === 'CPM' ? campaign.avgValue : undefined,
-                                                        cvr: campaign.avgMetrics?.cvr,
-                                                        aov: campaign.avgMetrics?.aov,
-                                                        cpa: campaign.avgMetrics?.cpa,
-                                                        cpatc: campaign.avgMetrics?.cpatc,
-                                                        atc_rate: campaign.avgMetrics?.atc_rate,
-                                                        ctr: campaign.avgMetrics?.ctr,
-                                                        clicks: campaign.avgMetrics?.clicks,
-                                                        impressions: campaign.avgMetrics?.impressions,
-                                                        reach: campaign.avgMetrics?.reach,
-                                                        frequency: campaign.avgMetrics?.frequency,
-                                                    };
-
-
-                                                    // 使用新的诊断引擎（仅针对ROI类型的Campaign）
-                                                    let guidance: string;
-                                                    let diagnosticResult: DiagnosticResult | null = null;
-                                                    let context: CampaignContext | undefined;
-
-                                                    if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
-                                                        // 计算上下文数据（用于场景5和6）
-
-                                                        // 1. 计算AdSet数量
-                                                        const adsetCount = new Set(
-                                                            data
-                                                                .filter(r => r.campaign_name === campaign.campaignName)
-                                                                .map(r => r.adset_name)
-                                                        ).size;
-
-                                                        // 2. 计算运行天数
-                                                        const start = new Date(dateRange.start);
-                                                        const end = new Date(dateRange.end);
-                                                        const diffTime = Math.abs(end.getTime() - start.getTime());
-                                                        const activeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // 包含起始日
-
-                                                        // 3. 计算日预算和Campaign总预算
-                                                        const config = configs.find(c => c.id === campaign.businessLineId);
-                                                        const totalBudget = config?.budget || 0;
-                                                        const dailyBudget = totalBudget / activeDays / filteredBlResult.campaigns.length;
-                                                        const campaignBudget = dailyBudget * activeDays;
-
-                                                        // 4. 构建上下文对象
-                                                        context = {
-                                                            adsetCount,
-                                                            activeDays,
-                                                            dailyBudget,
-                                                            campaignBudget
-                                                        };
-
-                                                        // 5. 使用扩展的诊断函数（包含场景5和6）
-                                                        diagnosticResult = diagnoseCampaignWithContext(
-                                                            {
-                                                                ...metrics,
-                                                                // 确保包含所有新增的中间指标
-                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
-                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
-                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
-                                                                frequency: campaign.metrics?.frequency || 0,
-                                                            } as any,
-                                                            campaignBenchmarks,
-                                                            context  // 传入上下文数据
-                                                        );
-
-                                                        // 获取所有匹配的诊断场景（支持多场景显示）
-                                                        const allDiagnosticResults = campaign.kpiType === 'ROI' && campaignBenchmarks && context
-                                                            ? diagnoseAllScenarios(
-                                                                {
-                                                                    ...metrics,
-                                                                    click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
-                                                                    checkout_rate: campaign.metrics?.checkout_rate || 0,
-                                                                    purchase_rate: campaign.metrics?.purchase_rate || 0,
-                                                                    frequency: campaign.metrics?.frequency || 0,
-                                                                } as any,
-                                                                campaignBenchmarks,
-                                                                context
-                                                            )
-                                                            : [];
-
-                                                        if (allDiagnosticResults.length > 0) {
-                                                            // 格式化所有诊断结果为guidance字符串，每个场景一行
-                                                            guidance = allDiagnosticResults.map(result => {
-                                                                const priorityEmoji = result.priority === 1 ? '🔴' : result.priority === 2 ? '🟡' : '🟢';
-                                                                return `${priorityEmoji} ${result.scenario} - ${result.diagnosis}: ${result.action}`;
-                                                            }).join('\n');
-                                                        } else if (diagnosticResult) {
-                                                            // 兼容旧逻辑：如果没有多场景结果但有单场景结果
-                                                            const priorityEmoji = diagnosticResult.priority === 1 ? '🔴' : diagnosticResult.priority === 2 ? '🟡' : '🟢';
-                                                            guidance = `${priorityEmoji} ${diagnosticResult.scenario} - ${diagnosticResult.diagnosis}\n${diagnosticResult.action}`;
-                                                        } else {
-                                                            // 完全没有匹配到任何诊断规则
-                                                            guidance = '⚠️ 暂无匹配的 action';
-                                                        }
-                                                    } else {
-                                                        // 对于非ROI类型或没有benchmarks的情况，使用旧的规则引擎
-                                                        guidance = getOptimizationGuidance('Campaign', campaign.kpiType, metrics, avgMetrics);
-                                                    }
-
-                                                    // 获取所有匹配的诊断场景详情（用于详细面板显示）
-                                                    // V2 新增：计算趋势信息（使用真实L3D/L7D数据）
-                                                    let trendInfo: TrendInfo | undefined = undefined;
-                                                    if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
-                                                        // 使用真实日期过滤计算 L3D 和 L7D ROI
-                                                        const { l3dROI, l7dROI } = calculateL3DL7DROI(
-                                                            data,
-                                                            dateRange.end,
-                                                            campaign.campaignName
-                                                        );
-                                                        const benchmarkROI = campaignBenchmarks.avgRoi || 0;
-                                                        trendInfo = calculateTrend(l3dROI, l7dROI, benchmarkROI);
-                                                    }
-
-                                                    const diagnosticDetails = campaign.kpiType === 'ROI' && campaignBenchmarks && context
-                                                        ? diagnoseAllScenarios(
-                                                            {
-                                                                ...metrics,
-                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
-                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
-                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
-                                                                frequency: campaign.metrics?.frequency || 0,
-                                                            } as any,
-                                                            campaignBenchmarks,
-                                                            context
-                                                        ).map(result => convertToDetailedDiagnostic(
-                                                            result,
-                                                            {
-                                                                ...metrics,
-                                                                click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
-                                                                checkout_rate: campaign.metrics?.checkout_rate || 0,
-                                                                purchase_rate: campaign.metrics?.purchase_rate || 0,
-                                                                frequency: campaign.metrics?.frequency || 0,
-                                                            } as any,
-                                                            campaignBenchmarks,
-                                                            context,
-                                                            trendInfo  // V2: 传递趋势信息
-                                                        ))
-                                                        : undefined;
-
-                                                    return (
-                                                        <React.Fragment key={campaign.id}>
-                                                            <tr className="border-b hover:bg-slate-50 transition-all">
-                                                                <td className="px-4 py-3 font-medium text-slate-900">{campaign.campaignName}</td>
-                                                                <td className="px-4 py-3 text-slate-600">{campaign.businessLine}</td>
-                                                                <td className="px-4 py-3">
-                                                                    <SpendDetailCell
-                                                                        spend={campaign.spend}
-                                                                        avgSpend={campaign.avgSpend}
-                                                                        lastSpend={campaign.lastSpend}
+                                {isCampaignTableExpanded && (
+                                    <>
+                                        {filteredBlResult.campaigns.length > 0 ? (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full">
+                                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">Campaign Name</th>
+                                                            <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">业务线</th>
+                                                            <th
+                                                                className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                                onClick={() => handleCampaignSort('spend')}
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    Spend
+                                                                    <SortIcon
+                                                                        active={campaignSort.field === 'spend'}
+                                                                        direction={campaignSort.direction}
                                                                     />
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    <KPIBadgeWithTarget
-                                                                        kpiType={campaign.kpiType}
-                                                                        targetValue={campaign.targetValue}
+                                                                </div>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">KPI</th>
+                                                            <th
+                                                                className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                                                                onClick={() => handleCampaignSort('kpi')}
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    KPI 值
+                                                                    <SortIcon
+                                                                        active={campaignSort.field === 'kpi'}
+                                                                        direction={campaignSort.direction}
                                                                     />
-                                                                </td>
-                                                                <td className="px-4 py-3">
-                                                                    <KPIValueCell
-                                                                        actualValue={campaign.actualValue}
-                                                                        avgValue={campaign.avgValue}
-                                                                        lastValue={campaign.lastValue}
-                                                                        kpiType={campaign.kpiType}
-                                                                    />
-                                                                </td>
+                                                                </div>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-center text-xs font-black text-slate-700 uppercase w-20">优先级</th>
+                                                            <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase w-24">调优指导</th>
+                                                            <th className="px-4 py-3 text-left text-xs font-black text-slate-700 uppercase">操作</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {sortedCampaigns.map(campaign => {
+                                                            const isExpanded = blExpandedGuidance.has(campaign.id);
 
-                                                                <td className="px-4 py-3 text-center">
-                                                                    {campaign.priority === 'P0' && (
-                                                                        <span className="text-red-600 font-bold text-sm">🔴 P0</span>
-                                                                    )}
-                                                                    {campaign.priority === 'P1' && (
-                                                                        <span className="text-amber-600 font-bold text-sm">🟡 P1</span>
-                                                                    )}
-                                                                    {!campaign.priority && (
-                                                                        <span className="text-gray-400 text-sm">-</span>
-                                                                    )}
-                                                                </td>
+                                                            const metrics: CampaignMetrics = {
+                                                                spend: campaign.spend,
+                                                                roi: campaign.kpiType === 'ROI' ? campaign.actualValue : undefined,
+                                                                cpc: campaign.kpiType === 'CPC' ? campaign.actualValue : undefined,
+                                                                cpm: campaign.kpiType === 'CPM' ? campaign.actualValue : undefined,
+                                                                cvr: campaign.metrics?.cvr,
+                                                                aov: campaign.metrics?.aov,
+                                                                cpa: campaign.metrics?.cpa,
+                                                                cpatc: campaign.metrics?.cpatc,
+                                                                atc_rate: campaign.metrics?.atc_rate,
+                                                                ctr: campaign.metrics?.ctr,
+                                                                clicks: campaign.metrics?.clicks,
+                                                                impressions: campaign.metrics?.impressions,
+                                                                reach: campaign.metrics?.reach,
+                                                                frequency: campaign.metrics?.frequency,
+                                                                // 添加原始数据字段用于公式计算
+                                                                link_clicks: campaign.metrics?.clicks || 0,
+                                                                landing_page_views: campaign.metrics?.landing_page_views || 0,
+                                                                purchases: campaign.metrics?.purchases || 0,
+                                                                adds_to_cart: campaign.metrics?.adds_to_cart || 0,
+                                                                checkouts_initiated: campaign.metrics?.checkouts_initiated || 0,
+                                                                purchase_value: campaign.metrics?.purchase_value || 0,
+                                                            };
 
-                                                                <td className="px-4 py-3">
-                                                                    <button
-                                                                        onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, campaign.id)}
-                                                                        className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
-                                                                    >
-                                                                        {isExpanded ? (
-                                                                            <ChevronDown className="w-4 h-4 text-slate-500" />
-                                                                        ) : (
-                                                                            <ChevronRight className="w-4 h-4 text-slate-500" />
-                                                                        )}
-                                                                    </button>
-                                                                </td>
+                                                            const avgMetrics: CampaignMetrics = {
+                                                                spend: campaign.avgSpend,
+                                                                roi: campaign.kpiType === 'ROI' ? campaign.avgValue : undefined,
+                                                                cpc: campaign.kpiType === 'CPC' ? campaign.avgValue : undefined,
+                                                                cpm: campaign.kpiType === 'CPM' ? campaign.avgValue : undefined,
+                                                                cvr: campaign.avgMetrics?.cvr,
+                                                                aov: campaign.avgMetrics?.aov,
+                                                                cpa: campaign.avgMetrics?.cpa,
+                                                                cpatc: campaign.avgMetrics?.cpatc,
+                                                                atc_rate: campaign.avgMetrics?.atc_rate,
+                                                                ctr: campaign.avgMetrics?.ctr,
+                                                                clicks: campaign.avgMetrics?.clicks,
+                                                                impressions: campaign.avgMetrics?.impressions,
+                                                                reach: campaign.avgMetrics?.reach,
+                                                                frequency: campaign.avgMetrics?.frequency,
+                                                            };
 
-                                                                <td className="px-4 py-3">
-                                                                    <button
-                                                                        onClick={() => handleBlRemove(campaign.id)}
-                                                                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-all"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </td>
-                                                            </tr>
 
-                                                            {isExpanded && (
-                                                                <tr className="bg-slate-50 border-b border-slate-200">
-                                                                    <td colSpan={8} className="px-4 py-4">
-                                                                        <div className="space-y-3 w-full">
-                                                                            <GuidanceDetailPanel
-                                                                                guidance={guidance}
-                                                                                metrics={metrics}
-                                                                                avgMetrics={avgMetrics}
-                                                                                kpiType={campaign.kpiType}
-                                                                                intermediateMetrics={campaign.metrics}
-                                                                                intermediateAvgMetrics={campaign.avgMetrics}
-                                                                                lastMetrics={campaign.lastMetrics}
-                                                                                diagnosticDetails={diagnosticDetails}
-                                                                                priority={campaign.priority}
-                                                                                benchmarkROI={campaign.avgValue}
+                                                            // 使用新的诊断引擎（仅针对ROI类型的Campaign）
+                                                            let guidance: string;
+                                                            let diagnosticResult: DiagnosticResult | null = null;
+                                                            let context: CampaignContext | undefined;
+
+                                                            if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
+                                                                // 计算上下文数据（用于场景5和6）
+
+                                                                // 1. 计算AdSet数量
+                                                                const adsetCount = new Set(
+                                                                    data
+                                                                        .filter(r => r.campaign_name === campaign.campaignName)
+                                                                        .map(r => r.adset_name)
+                                                                ).size;
+
+                                                                // 2. 计算运行天数
+                                                                const start = new Date(dateRange.start);
+                                                                const end = new Date(dateRange.end);
+                                                                const diffTime = Math.abs(end.getTime() - start.getTime());
+                                                                const activeDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // 包含起始日
+
+                                                                // 3. 计算日预算和Campaign总预算
+                                                                const config = configs.find(c => c.id === campaign.businessLineId);
+                                                                const totalBudget = config?.budget || 0;
+                                                                const dailyBudget = totalBudget / activeDays / filteredBlResult.campaigns.length;
+                                                                const campaignBudget = dailyBudget * activeDays;
+
+                                                                // 4. 构建上下文对象
+                                                                context = {
+                                                                    adsetCount,
+                                                                    activeDays,
+                                                                    dailyBudget,
+                                                                    campaignBudget
+                                                                };
+
+                                                                // 5. 使用扩展的诊断函数（包含场景5和6）
+                                                                diagnosticResult = diagnoseCampaignWithContext(
+                                                                    {
+                                                                        ...metrics,
+                                                                        // 确保包含所有新增的中间指标
+                                                                        click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                        checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                        purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                        frequency: campaign.metrics?.frequency || 0,
+                                                                    } as any,
+                                                                    campaignBenchmarks,
+                                                                    context  // 传入上下文数据
+                                                                );
+
+                                                                // 获取所有匹配的诊断场景（支持多场景显示）
+                                                                const allDiagnosticResults = campaign.kpiType === 'ROI' && campaignBenchmarks && context
+                                                                    ? diagnoseAllScenarios(
+                                                                        {
+                                                                            ...metrics,
+                                                                            click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                            checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                            purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                            frequency: campaign.metrics?.frequency || 0,
+                                                                        } as any,
+                                                                        campaignBenchmarks,
+                                                                        context
+                                                                    )
+                                                                    : [];
+
+                                                                if (allDiagnosticResults.length > 0) {
+                                                                    // 格式化所有诊断结果为guidance字符串，每个场景一行
+                                                                    guidance = allDiagnosticResults.map(result => {
+                                                                        const priorityEmoji = result.priority === 1 ? '🔴' : result.priority === 2 ? '🟡' : '🟢';
+                                                                        return `${priorityEmoji} ${result.scenario} - ${result.diagnosis}: ${result.action}`;
+                                                                    }).join('\n');
+                                                                } else if (diagnosticResult) {
+                                                                    // 兼容旧逻辑：如果没有多场景结果但有单场景结果
+                                                                    const priorityEmoji = diagnosticResult.priority === 1 ? '🔴' : diagnosticResult.priority === 2 ? '🟡' : '🟢';
+                                                                    guidance = `${priorityEmoji} ${diagnosticResult.scenario} - ${diagnosticResult.diagnosis}\n${diagnosticResult.action}`;
+                                                                } else {
+                                                                    // 完全没有匹配到任何诊断规则
+                                                                    guidance = '⚠️ 暂无匹配的 action';
+                                                                }
+                                                            } else {
+                                                                // 对于非ROI类型或没有benchmarks的情况，使用旧的规则引擎
+                                                                guidance = getOptimizationGuidance('Campaign', campaign.kpiType, metrics, avgMetrics);
+                                                            }
+
+                                                            // 获取所有匹配的诊断场景详情（用于详细面板显示）
+                                                            // V2 新增：计算趋势信息（使用真实L3D/L7D数据）
+                                                            let trendInfo: TrendInfo | undefined = undefined;
+                                                            if (campaign.kpiType === 'ROI' && campaignBenchmarks) {
+                                                                // 使用真实日期过滤计算 L3D 和 L7D ROI
+                                                                const { l3dROI, l7dROI } = calculateL3DL7DROI(
+                                                                    data,
+                                                                    dateRange.end,
+                                                                    campaign.campaignName
+                                                                );
+                                                                const benchmarkROI = campaignBenchmarks.avgRoi || 0;
+                                                                trendInfo = calculateTrend(l3dROI, l7dROI, benchmarkROI);
+                                                            }
+
+                                                            const diagnosticDetails = campaign.kpiType === 'ROI' && campaignBenchmarks && context
+                                                                ? diagnoseAllScenarios(
+                                                                    {
+                                                                        ...metrics,
+                                                                        click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                        checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                        purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                        frequency: campaign.metrics?.frequency || 0,
+                                                                    } as any,
+                                                                    campaignBenchmarks,
+                                                                    context
+                                                                ).map(result => convertToDetailedDiagnostic(
+                                                                    result,
+                                                                    {
+                                                                        ...metrics,
+                                                                        click_to_pv_rate: campaign.metrics?.click_to_pv_rate || 0,
+                                                                        checkout_rate: campaign.metrics?.checkout_rate || 0,
+                                                                        purchase_rate: campaign.metrics?.purchase_rate || 0,
+                                                                        frequency: campaign.metrics?.frequency || 0,
+                                                                    } as any,
+                                                                    campaignBenchmarks,
+                                                                    context,
+                                                                    trendInfo  // V2: 传递趋势信息
+                                                                ))
+                                                                : undefined;
+
+                                                            return (
+                                                                <React.Fragment key={campaign.id}>
+                                                                    <tr className="border-b hover:bg-slate-50 transition-all">
+                                                                        <td className="px-4 py-3 font-medium text-slate-900">{campaign.campaignName}</td>
+                                                                        <td className="px-4 py-3 text-slate-600">{campaign.businessLine}</td>
+                                                                        <td className="px-4 py-3">
+                                                                            <SpendDetailCell
+                                                                                spend={campaign.spend}
+                                                                                avgSpend={campaign.avgSpend}
+                                                                                lastSpend={campaign.lastSpend}
                                                                             />
-                                                                        </div>
-                                                                    </td>
-                                                                </tr>
-                                                            )}
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <div className="p-8 text-center text-slate-500">暂无需要调整的 Campaign</div>
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <KPIBadgeWithTarget
+                                                                                kpiType={campaign.kpiType}
+                                                                                targetValue={campaign.targetValue}
+                                                                            />
+                                                                        </td>
+                                                                        <td className="px-4 py-3">
+                                                                            <KPIValueCell
+                                                                                actualValue={campaign.actualValue}
+                                                                                avgValue={campaign.avgValue}
+                                                                                lastValue={campaign.lastValue}
+                                                                                kpiType={campaign.kpiType}
+                                                                            />
+                                                                        </td>
+
+                                                                        <td className="px-4 py-3 text-center">
+                                                                            {campaign.priority === 'P0' && (
+                                                                                <span className="text-red-600 font-bold text-sm">🔴 P0</span>
+                                                                            )}
+                                                                            {campaign.priority === 'P1' && (
+                                                                                <span className="text-amber-600 font-bold text-sm">🟡 P1</span>
+                                                                            )}
+                                                                            {!campaign.priority && (
+                                                                                <span className="text-gray-400 text-sm">-</span>
+                                                                            )}
+                                                                        </td>
+
+                                                                        <td className="px-4 py-3">
+                                                                            <button
+                                                                                onClick={() => toggleGuidance(blExpandedGuidance, setBlExpandedGuidance, campaign.id)}
+                                                                                className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-100 transition-colors"
+                                                                            >
+                                                                                {isExpanded ? (
+                                                                                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                                                                                ) : (
+                                                                                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                                                                                )}
+                                                                            </button>
+                                                                        </td>
+
+                                                                        <td className="px-4 py-3">
+                                                                            <button
+                                                                                onClick={() => handleBlRemove(campaign.id)}
+                                                                                className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg transition-all"
+                                                                            >
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+
+                                                                    {isExpanded && (
+                                                                        <tr className="bg-slate-50 border-b border-slate-200">
+                                                                            <td colSpan={8} className="px-4 py-4">
+                                                                                <div className="space-y-3 w-full">
+                                                                                    <GuidanceDetailPanel
+                                                                                        guidance={guidance}
+                                                                                        metrics={metrics}
+                                                                                        avgMetrics={avgMetrics}
+                                                                                        kpiType={campaign.kpiType}
+                                                                                        intermediateMetrics={campaign.metrics}
+                                                                                        intermediateAvgMetrics={campaign.avgMetrics}
+                                                                                        lastMetrics={campaign.lastMetrics}
+                                                                                        diagnosticDetails={diagnosticDetails}
+                                                                                        priority={campaign.priority}
+                                                                                        benchmarkROI={campaign.avgValue}
+                                                                                    />
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </React.Fragment>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        ) : (
+                                            <div className="p-8 text-center text-slate-500">暂无需要调整的 Campaign</div>
+                                        )}
+                                    </>
                                 )}
                             </div>
 
