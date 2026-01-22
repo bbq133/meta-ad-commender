@@ -336,6 +336,10 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     // Campaign AI 总结 (campaignId -> {attribution, action})
     const [campaignAiSummaries, setCampaignAiSummaries] = useState<Map<string, { attribution: string; action: string }>>(new Map());
 
+    // Campaign AI 总结加载状态
+    const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
+    const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
+
     // AI诊断面板 ref
     const aiDiagnosticRef = useRef<AIDiagnosticPanelRef>(null);
 
@@ -660,7 +664,16 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
 
             // 批量生成 Campaign AI 总结
             setTimeout(async () => {
+                console.log('🔍 检查AI总结生成条件:', {
+                    campaignsCount: blActionResult.campaigns.length,
+                    hasApiKey: !!config?.system.geminiApiKey
+                });
+
                 if (blActionResult.campaigns.length > 0 && config?.system.geminiApiKey) {
+                    console.log('✅ 开始生成AI总结，设置加载状态为 true');
+                    setIsAiSummaryLoading(true);   // 开始加载
+                    setAiSummaryError(null);        // 清除错误
+
                     try {
                         const { createGeminiService } = await import('../../services/geminiService');
                         const geminiService = createGeminiService(config.system.geminiApiKey);
@@ -677,10 +690,18 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                             const summaries = await geminiService.summarizeCampaignDiagnostics(campaignsData);
                             setCampaignAiSummaries(summaries);
                             console.log('✅ Campaign AI 总结生成完成', summaries.size, '个');
+                        } else {
+                            console.log('⚠️ 没有需要生成AI总结的Campaign（无诊断数据）');
                         }
                     } catch (error) {
                         console.error('⚠️ Campaign AI 总结生成失败:', error);
+                        setAiSummaryError('AI总结生成失败，请重试');  // 设置错误信息
+                    } finally {
+                        console.log('🏁 AI总结生成结束，设置加载状态为 false');
+                        setIsAiSummaryLoading(false);  // 结束加载
                     }
+                } else {
+                    console.log('❌ 不满足AI总结生成条件，跳过');
                 }
             }, 1000);
         }, 500);
@@ -819,10 +840,25 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                             {/* Campaign 层级的 AI 总结表格 */}
                             {filteredBlResult && filteredBlResult.campaigns.length > 0 && (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div className="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                    <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                                         <h3 className="text-lg font-black text-slate-900">
                                             📊 Campaign 层级的 AI 总结
                                         </h3>
+
+                                        {/* 加载指示器 */}
+                                        {isAiSummaryLoading && (
+                                            <div className="flex items-center gap-2 text-sm text-indigo-600">
+                                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div>
+                                                <span className="font-medium">AI 总结生成中...</span>
+                                            </div>
+                                        )}
+
+                                        {/* 错误提示 */}
+                                        {!isAiSummaryLoading && aiSummaryError && (
+                                            <div className="flex items-center gap-2 text-sm text-red-600">
+                                                <span>⚠️ {aiSummaryError}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full">
@@ -849,11 +885,9 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             ? { text: '保持观察', color: 'bg-yellow-100 text-yellow-700', icon: '🟡' }
                                                             : { text: '-', color: 'bg-slate-100 text-slate-500', icon: '' };
 
-                                                    // 异常数据提取
+                                                    // 异常数据提取 - 只显示场景标题
                                                     const abnormalData = diagnosticDetails
-                                                        .flatMap(d => d.steps || [])
-                                                        .filter(step => step.stepNumber === 0 || step.stepName?.includes('判定'))
-                                                        .map(step => step.content?.description || step.content?.condition)
+                                                        .map(d => d.scenario)  // 只取场景名称
                                                         .filter(Boolean)
                                                         .slice(0, 3); // 最多显示3条
 

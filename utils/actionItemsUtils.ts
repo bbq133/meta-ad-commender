@@ -276,14 +276,15 @@ export const generateActionItems = (
     });
 
     // 计算每个 Ad 的指标
-    const adMetricsArray: { roi: number; ctr: number; videoPlayRate3s: number | undefined; frequency: number }[] = [];
+    const adMetricsArray: { roi: number; ctr: number; cvr: number; videoPlayRate3s: number | undefined; frequency: number }[] = [];
     globalAdMap.forEach(adData => {
         if (adData.spend > 0) {  // 排除无花费的 Ad
             const roi = adData.spend > 0 ? adData.revenue / adData.spend : 0;
             const ctr = adData.impressions > 0 ? adData.clicks / adData.impressions : 0;
+            const cvr = adData.clicks > 0 ? (adData.revenue > 0 ? 1 : 0) : 0;  // 简化CVR计算：有转化为1，无转化为0
             const videoPlayRate3s = adData.impressions > 0 ? adData.videoPlays3s / adData.impressions : undefined;
             const frequency = adData.reach > 0 ? adData.impressions / adData.reach : 0;
-            adMetricsArray.push({ roi, ctr, videoPlayRate3s, frequency });
+            adMetricsArray.push({ roi, ctr, cvr, videoPlayRate3s, frequency });
         }
     });
 
@@ -294,6 +295,12 @@ export const generateActionItems = (
         : 0;
     const globalAdAvgCtr = globalAdCount > 0
         ? adMetricsArray.reduce((sum, m) => sum + m.ctr, 0) / globalAdCount
+        : 0;
+    const globalAdAvgCvr = globalAdCount > 0
+        ? adMetricsArray.reduce((sum, m) => sum + m.cvr, 0) / globalAdCount
+        : 0;
+    const globalAdAvgFrequency = globalAdCount > 0
+        ? adMetricsArray.reduce((sum, m) => sum + m.frequency, 0) / globalAdCount
         : 0;
     const validVideoPlayRates = adMetricsArray.filter(m => m.videoPlayRate3s !== undefined);
     const globalAdAvgVideoPlayRate3s = validVideoPlayRates.length > 0
@@ -582,23 +589,67 @@ export const generateActionItems = (
                 const videoPlayRate3s = totalImpressions > 0 ? totalVideoPlays3s / totalImpressions : undefined;
 
                 // 计算当前 Ad 的 CTR (小数格式)
-                const adCtr = totalImpressions > 0 ? adRecords.reduce((sum, r) => sum + r.link_clicks, 0) / totalImpressions : 0;
+                const totalClicks = adRecords.reduce((sum, r) => sum + r.link_clicks, 0);
+                const adCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+
+                // 计算当前 Ad 的 CVR (conversions / clicks × 100%)
+                const totalPurchases = adRecords.reduce((sum, r) => sum + (r.purchases || 0), 0);
+                const adCvr = totalClicks > 0 ? totalPurchases / totalClicks : 0;
 
                 // 计算当前 Ad 的 Frequency
                 const totalReach = adRecords.reduce((sum, r) => sum + (r.reach || 0), 0);
                 const adFrequency = totalReach > 0 ? totalImpressions / totalReach : 0;
 
-                // 构建诊断上下文 - 使用全局 Ad 平均值 (不受业务线限制)
+                // 判断是否为视频素材 (Ad name包含"video")
+                const isVideo = adName.toLowerCase().includes('video');
+
+                // 计算 Adset Budget 和 Active Ads
+                // Adset Budget = Campaign Budget / AdSet总数
+                // 由于没有直接的Campaign Budget数据，使用业务线总花费作为估算
+                const campaignBudget = config.budget || avgBusinessLineSpend * 30;  // 使用配置的预算或估算月预算
+
+                // 统计当前Campaign下的AdSet数量
+                const adsetsInCampaign = Array.from(adGroupMap.values()).filter(
+                    ag => ag.campaignName === campaignName
+                );
+                const uniqueAdsets = new Set(adsetsInCampaign.map(ag => ag.adSetName));
+                const adsetCount = uniqueAdsets.size || 1;
+                const adsetBudget = campaignBudget / adsetCount;
+
+                // Active Ads = 当前AdSet中spend > 0的AD数量
+                const adsInSameAdset = Array.from(adGroupMap.values()).filter(
+                    ag => ag.campaignName === campaignName && ag.adSetName === adSetName
+                );
+                const activeAds = adsInSameAdset.filter(ag =>
+                    ag.records.reduce((sum, r) => sum + r.spend, 0) > 0
+                ).length || 1;
+
+                // 构建诊断上下文 - 使用全局 Ad 平均值作为 Benchmark
                 const diagContext: AdDiagnosticContext = {
+                    // 基础数据
                     spend: adSpend,
-                    roi: kpiType === 'ROI' ? adKPI : 0,
-                    avgRoi: globalAdAvgRoi,  // 使用全局 Ad 平均 ROI
-                    ctr: adCtr,              // 使用直接计算的 CTR (小数格式)
-                    avgCtr: globalAdAvgCtr,  // 使用全局 Ad 平均 CTR
-                    frequency: adFrequency,  // 使用直接计算的 Frequency
                     activeDays,
+
+                    // Adset相关
+                    adsetBudget,
+                    activeAds,
+
+                    // 性能指标
+                    roi: kpiType === 'ROI' ? adKPI : 0,
+                    ctr: adCtr,
+                    cvr: adCvr,
+                    frequency: adFrequency,
+
+                    // Benchmark（基准值）
+                    roiBenchmark: globalAdAvgRoi,
+                    ctrBenchmark: globalAdAvgCtr,
+                    cvrBenchmark: globalAdAvgCvr,
+                    frequencyBenchmark: globalAdAvgFrequency,
+
+                    // 视频相关（可选）
+                    isVideo,
                     videoPlayRate3s,
-                    avgVideoPlayRate3s: globalAdAvgVideoPlayRate3s  // 使用全局 Ad 平均 3秒播放率
+                    videoPlayRate3sBenchmark: globalAdAvgVideoPlayRate3s
                 };
 
                 // 执行诊断
