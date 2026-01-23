@@ -8,7 +8,7 @@ import { ActionItemsResult, ActionCampaign } from './actionItemsUtils';
  */
 export interface DiagnosticDetail {
     campaignName: string;
-    priority: 'P0' | 'P1' | null;
+    priority: 'P0' | 'P1' | 'P2' | number | null;  // 🆕 支持 P2 和数字
     scenario: string;
     diagnosis: string;
     action: string;
@@ -23,18 +23,35 @@ export interface DataSummary {
     totalSpend: number;
     p0Count: number;
     p1Count: number;
+    p2Count: number;  // 🆕 新增 P2 统计
 
-    // 问题分类统计
-    problemCategories: {
-        category: string;      // 问题类别
+    // Campaign 按优先级分类
+    campaignsByPriority: {
+        p0Campaigns: string[];  // P0 Campaign 名称列表
+        p1Campaigns: string[];  // P1 Campaign 名称列表
+        p2Campaigns: string[];  // P2 Campaign 名称列表
+    };
+
+    // 素材问题分类（从 Ad 诊断中提取）
+    materialIssues: {
+        category: string;      // 素材问题类型
         count: number;         // 数量
         percentage: number;    // 占比
-        examples: string[];    // 示例描述
+        suggestions: string[]; // 建议
+        adNames: string[];     // 🆕 Ad 名称列表
+    }[];
+
+    // 问题分类统计（保留兼容）
+    problemCategories: {
+        category: string;
+        count: number;
+        percentage: number;
+        examples: string[];
     }[];
 
     // Action 摘要
     topActions: {
-        priority: 'P0' | 'P1';
+        priority: 'P0' | 'P1' | 'P2';
         action: string;
         count: number;
     }[];
@@ -93,6 +110,51 @@ function extractProblemCategory(scenario: string, diagnosis: string): string {
 }
 
 /**
+ * 从Ad诊断中提取素材问题类别
+ */
+function extractMaterialIssue(scenario: string, diagnosis: string): string | null {
+    const scenarioLower = scenario.toLowerCase();
+    const diagnosisLower = diagnosis.toLowerCase();
+
+    // 投放时间过短
+    if (scenarioLower.includes('投放时间') || scenarioLower.includes('时间过短')) {
+        return '投放时间过短';
+    }
+
+    // 僵尸素材
+    if (scenarioLower.includes('僵尸') || diagnosisLower.includes('僵尸')) {
+        return '僵尸素材';
+    }
+
+    // 视觉不突出
+    if (scenarioLower.includes('视觉') || diagnosisLower.includes('视觉')) {
+        return '视觉不突出';
+    }
+
+    // 点击党
+    if (scenarioLower.includes('点击') && (scenarioLower.includes('党') || diagnosisLower.includes('点击党'))) {
+        return '点击党';
+    }
+
+    // 低客单
+    if (scenarioLower.includes('低客单') || scenarioLower.includes('aov')) {
+        return '低客单';
+    }
+
+    // 素材疲劳
+    if (scenarioLower.includes('疲劳') || diagnosisLower.includes('疲劳')) {
+        return '素材疲劳';
+    }
+
+    // 爆款素材
+    if (scenarioLower.includes('爆款') || scenarioLower.includes('top')) {
+        return '爆款素材';
+    }
+
+    return null;
+}
+
+/**
  * 简化 Action 描述
  */
 function simplifyAction(action: string): string {
@@ -126,21 +188,89 @@ function simplifyAction(action: string): string {
 }
 
 /**
+ * 标准化优先级为字符串
+ */
+function normalizePriority(priority: any): 'P0' | 'P1' | 'P2' | null {
+    if (priority === 0 || priority === 'P0') return 'P0';
+    if (priority === 1 || priority === 'P1') return 'P1';
+    if (priority === 2 || priority === 'P2') return 'P2';
+    return null;
+}
+
+/**
  * 从 Action Items 数据中生成数据摘要
  */
 export function generateDataSummary(
     result: ActionItemsResult,
-    diagnosticsMap: Map<string, DiagnosticDetail[]>  // campaignId -> diagnosticDetails
+    diagnosticsMap: Map<string, DiagnosticDetail[]>,  // campaignId -> diagnosticDetails
+    adDiagnosticsMap?: Map<string, DiagnosticDetail[]>  // 🆕 adId -> diagnosticDetails (可选)
 ): DataSummary {
     const campaigns = result.campaigns;
 
     // 基础统计
     const totalCampaigns = campaigns.length;
     const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
-    const p0Count = campaigns.filter(c => c.priority === 'P0').length;
-    const p1Count = campaigns.filter(c => c.priority === 'P1').length;
 
-    // 问题分类统计
+    const p0Count = campaigns.filter(c => normalizePriority(c.priority) === 'P0').length;
+    const p1Count = campaigns.filter(c => normalizePriority(c.priority) === 'P1').length;
+    const p2Count = campaigns.filter(c => normalizePriority(c.priority) === 'P2').length;
+
+    // 🆕 Campaign 按优先级分类
+    const campaignsByPriority = {
+        p0Campaigns: campaigns
+            .filter(c => normalizePriority(c.priority) === 'P0')
+            .map(c => c.campaignName)
+            .slice(0, 10),  // 最多显示10个
+        p1Campaigns: campaigns
+            .filter(c => normalizePriority(c.priority) === 'P1')
+            .map(c => c.campaignName)
+            .slice(0, 10),
+        p2Campaigns: campaigns
+            .filter(c => normalizePriority(c.priority) === 'P2')
+            .map(c => c.campaignName)
+            .slice(0, 10)
+    };
+
+    // 🆕 素材问题分类（从 Ad 诊断中提取）
+    const materialIssueMap = new Map<string, { count: number; suggestions: Set<string>; adNames: Set<string> }>();
+    let totalAdIssues = 0;
+
+    if (adDiagnosticsMap) {
+        adDiagnosticsMap.forEach((diagResults) => {
+            diagResults.forEach(diag => {
+                const issueCategory = extractMaterialIssue(diag.scenario, diag.diagnosis);
+                if (issueCategory) {
+                    if (!materialIssueMap.has(issueCategory)) {
+                        materialIssueMap.set(issueCategory, { count: 0, suggestions: new Set(), adNames: new Set() });
+                    }
+                    const data = materialIssueMap.get(issueCategory)!;
+                    data.count++;
+                    totalAdIssues++;
+
+                    // 🆕 收集 Ad 名称（注意：diag.campaignName 在 Ad 诊断中存储的是 Ad 名称）
+                    data.adNames.add(diag.campaignName);
+
+                    // 提取建议的第一句话
+                    const actionLines = diag.action.split('\n').filter(line => line.trim());
+                    if (actionLines.length > 0 && data.suggestions.size < 3) {
+                        data.suggestions.add(actionLines[0].substring(0, 100));
+                    }
+                }
+            });
+        });
+    }
+
+    const materialIssues = Array.from(materialIssueMap.entries())
+        .map(([category, data]) => ({
+            category,
+            count: data.count,
+            percentage: totalAdIssues > 0 ? (data.count / totalAdIssues) * 100 : 0,
+            suggestions: Array.from(data.suggestions),
+            adNames: Array.from(data.adNames)  // 🆕 添加 Ad 名称列表
+        }))
+        .sort((a, b) => b.count - a.count);
+
+    // 问题分类统计（保留兼容）
     const problemMap = new Map<string, { count: number; examples: string[] }>();
 
     diagnosticsMap.forEach((diagResults) => {
@@ -173,11 +303,11 @@ export function generateDataSummary(
         .sort((a, b) => b.count - a.count);
 
     // Action 摘要
-    const actionMap = new Map<string, { priority: 'P0' | 'P1'; count: number }>();
+    const actionMap = new Map<string, { priority: 'P0' | 'P1' | 'P2'; count: number }>();
 
     diagnosticsMap.forEach((diagResults, campaignId) => {
         const campaign = campaigns.find(c => c.id === campaignId);
-        const priority = campaign?.priority as 'P0' | 'P1' | null;
+        const priority = normalizePriority(campaign?.priority);
 
         if (!priority) return;
 
@@ -190,9 +320,9 @@ export function generateDataSummary(
 
             const existing = actionMap.get(actionKey)!;
             existing.count++;
-            // 如果有 P0 级别的，优先使用 P0
-            if (priority === 'P0') {
-                existing.priority = 'P0';
+            // 优先级：P0 > P1 > P2
+            if (priority === 'P0' || (priority === 'P1' && existing.priority === 'P2')) {
+                existing.priority = priority;
             }
         });
     });
@@ -206,6 +336,8 @@ export function generateDataSummary(
         .sort((a, b) => {
             if (a.priority === 'P0' && b.priority !== 'P0') return -1;
             if (a.priority !== 'P0' && b.priority === 'P0') return 1;
+            if (a.priority === 'P1' && b.priority === 'P2') return -1;
+            if (a.priority === 'P2' && b.priority === 'P1') return 1;
             return b.count - a.count;
         })
         .slice(0, 5);
@@ -218,7 +350,7 @@ export function generateDataSummary(
         diagResults.forEach(diag => {
             diagnosticDetails.push({
                 campaignName: campaign?.campaignName || 'Unknown',
-                priority: campaign?.priority || null,
+                priority: normalizePriority(campaign?.priority),
                 scenario: diag.scenario,
                 diagnosis: diag.diagnosis,
                 action: diag.action
@@ -231,6 +363,9 @@ export function generateDataSummary(
         totalSpend,
         p0Count,
         p1Count,
+        p2Count,
+        campaignsByPriority,
+        materialIssues,
         problemCategories,
         topActions,
         diagnosticDetails

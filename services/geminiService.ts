@@ -8,9 +8,27 @@ import { DataSummary, DiagnosticDetail } from '../utils/aiSummaryUtils';
  * AI 总结结果
  */
 export interface AISummaryResult {
-    conclusion: string;      // 今日诊断结论
-    mainProblems: string[];  // 主要问题列表
-    suggestions: string;     // 建议
+    conclusion: string;           // 今日诊断结论
+    campaignProblems: {           // Campaign 问题
+        p0: {
+            description: string;  // 描述：X条 (P0优先级)
+            campaigns: string[];  // Campaign 名称列表
+        };
+        p1: {
+            description: string;  // 描述：X条 (P1优先级)
+            campaigns: string[];  // Campaign 名称列表
+        };
+        p2: {
+            description: string;  // 描述：X条 (P2优先级)
+            campaigns: string[];  // Campaign 名称列表
+        };
+    };
+    materialIssues: {             // 素材情况
+        category: string;         // 问题类型
+        percentage: string;       // 占比
+        suggestion: string;       // 建议
+        ads: string[];            // Ad 名称列表
+    }[];
 }
 
 /**
@@ -47,6 +65,22 @@ export class GeminiService {
      * 构建 Prompt
      */
     private buildPrompt(summary: DataSummary): string {
+        // Campaign 按优先级分类
+        const p0CampaignsText = summary.campaignsByPriority.p0Campaigns.length > 0
+            ? summary.campaignsByPriority.p0Campaigns.map((name, i) => `  ${i + 1}. ${name}`).join('\n')
+            : '  暂无';
+        const p1CampaignsText = summary.campaignsByPriority.p1Campaigns.length > 0
+            ? summary.campaignsByPriority.p1Campaigns.map((name, i) => `  ${i + 1}. ${name}`).join('\n')
+            : '  暂无';
+        const p2CampaignsText = summary.campaignsByPriority.p2Campaigns.length > 0
+            ? summary.campaignsByPriority.p2Campaigns.map((name, i) => `  ${i + 1}. ${name}`).join('\n')
+            : '  暂无';
+
+        // 素材问题分类
+        const materialIssuesText = summary.materialIssues.length > 0
+            ? summary.materialIssues.map(issue => `- ${issue.category}: ${issue.count}条 (${issue.percentage.toFixed(1)}%)\n  建议: ${issue.suggestions.slice(0, 2).join('; ')}`).join('\n')
+            : '- 暂无Ad层级数据';
+
         // 问题分类信息
         const problemsText = summary.problemCategories.length > 0
             ? summary.problemCategories.map(p => `- ${p.category}: ${p.count}条 (${p.percentage.toFixed(1)}%)`).join('\n')
@@ -68,11 +102,11 @@ ${p.examples.map((ex, i) => `${i + 1}. ${ex}`).join('\n')}
         // 诊断详情
         const diagDetailsText = summary.diagnosticDetails.length > 0
             ? summary.diagnosticDetails.slice(0, 8).map((d, i) => `
-${i + 1}. Campaign: ${d.campaignName.substring(0, 40)}${d.campaignName.length > 40 ? '...' : ''}
+${i + 1}. Campaign: ${d.campaignName}
    - 优先级: ${d.priority || '无'}
    - 场景: ${d.scenario}
    - 诊断: ${d.diagnosis}
-   - 建议: ${d.action.substring(0, 50)}${d.action.length > 50 ? '...' : ''}
+   - 建议: ${d.action}
 `).join('\n')
             : '暂无详细诊断数据';
 
@@ -82,23 +116,48 @@ ${i + 1}. Campaign: ${d.campaignName.substring(0, 40)}${d.campaignName.length > 
 
 - Campaign总数: ${summary.totalCampaigns}
 - 总花费: $${summary.totalSpend.toFixed(2)}
-- P0优先级（紧急）: ${summary.p0Count} 条
-- P1优先级（高优先级）: ${summary.p1Count} 条
+- P0优先级（立即关停）: ${summary.p0Count} 条
+- P1优先级（下调预算）: ${summary.p1Count} 条
+- P2优先级（保持观察）: ${summary.p2Count} 条
 
-## 🔍 问题分类统计
+## 🎯 Campaign 按优先级分类
+
+### P0 - 立即关停 (${summary.p0Count}条)
+${p0CampaignsText}
+
+### P1 - 下调预算 (${summary.p1Count}条)
+${p1CampaignsText}
+
+### P2 - 保持观察 (${summary.p2Count}条)
+${p2CampaignsText}
+
+## 🎨 素材问题分类统计
+
+${materialIssuesText}
+
+## 🔍 Campaign问题分类统计
 
 ${problemsText}
 
 问题详情示例：
 ${examplesText}
 
-## 🎯 高频 Action 建议
+## 💡 高频 Action 建议
 
 ${actionsText}
 
-## 📋 详细诊断数据
+## 📋 Campaign 诊断详情
 
 ${diagDetailsText}
+
+## 🎨 Ad 素材诊断详情（按问题分类）
+
+${summary.materialIssues.length > 0 ? summary.materialIssues.map((issue, i) => `
+### ${i + 1}. ${issue.category} (${issue.percentage.toFixed(0)}%)
+相关 Ad 名称（前10个）：
+${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
+建议：${issue.suggestions.length > 0 ? issue.suggestions[0] : '排查相关素材'}
+`).join('\n') : '暂无 Ad 层级诊断数据'}
 
 ---
 
@@ -106,19 +165,49 @@ ${diagDetailsText}
 
 \`\`\`json
 {
-  "conclusion": "今日诊断结论（1-2句话，必须包含：Campaign数量、花费总额）",
-  "mainProblems": [
-    "2.1-问题类型1 (占比%)： 简短描述，不超过25字",
-    "2.2-问题类型2 (占比%)： 简短描述，不超过25字"
-  ],
-  "suggestions": "建议（1-2句话，聚焦P0级别的关键操作，不超过50字）"
+  "conclusion": "系统扫描显示${summary.totalCampaigns}条 Campaign 触发 ROI 预警，涉及风险消耗 $${summary.totalSpend.toFixed(2)}",
+  "campaignProblems": {
+    "p0": {
+      "description": "${summary.p0Count}条 (P0优先级)",
+      "campaigns": ["Campaign名称1", "Campaign名称2", "Campaign名称3"]
+    },
+    "p1": {
+      "description": "${summary.p1Count}条 (P1优先级)",
+      "campaigns": ["Campaign名称1", "Campaign名称2"]
+    },
+    "p2": {
+      "description": "${summary.p2Count}条 (P2优先级)",
+      "campaigns": ["Campaign名称1", "Campaign名称2"]
+    }
+  },
+  "materialIssues": [
+    {
+      "category": "僵尸素材",
+      "percentage": "25%",
+      "suggestion": "建议直接关停该素材",
+      "ads": ["Ad名称1", "Ad名称2", "Ad名称3"]
+    },
+    {
+      "category": "开头流失",
+      "percentage": "20%",
+      "suggestion": "建议重做前3秒内容",
+      "ads": ["Ad名称4", "Ad名称5"]
+    }
+  ]
 }
 \`\`\`
 
 要求：
-1. **conclusion** 必须包含准确的数字：${summary.totalCampaigns}条Campaign、$${summary.totalSpend.toFixed(2)}总花费
-2. **mainProblems** 列出2-3个最严重的问题，按占比排序
-3. **suggestions** 提炼最紧急的操作建议，优先P0级别
+1. **conclusion** 格式固定：系统扫描显示XX条 Campaign 触发 ROI 预警，涉及风险消耗 $XXX
+2. **campaignProblems** 必须包含 p0、p1、p2 三个对象
+   - 每个对象包含 description（描述）和 campaigns（Campaign名称数组）
+   - 从上面提供的 "Campaign 按优先级分类" 数据中提取对应优先级的Campaign名称
+   - campaigns 数组最多包含10个名称
+3. **materialIssues** 数组列出2-3个最严重的素材问题
+   - 每个对象包含：category（问题类型）、percentage（占比）、suggestion（建议）、ads（Ad名称数组）
+   - 从上面提供的 "素材问题分类统计" 数据中提取问题类型、占比和建议
+   - 注意：ads 数组应该包含 Ad 名称，不是 Campaign 名称
+   - ads 数组最多包含10个名称
 4. 使用简洁的商业语言，突出数据
 5. 严格使用JSON格式
 
@@ -142,8 +231,21 @@ ${diagDetailsText}
 
             return {
                 conclusion: parsed.conclusion || this.generateFallbackConclusion(summary),
-                mainProblems: Array.isArray(parsed.mainProblems) ? parsed.mainProblems : [],
-                suggestions: parsed.suggestions || '请查看下方详细列表进行优化。'
+                campaignProblems: parsed.campaignProblems || {
+                    p0: {
+                        description: `${summary.p0Count}条 (P0优先级)`,
+                        campaigns: summary.campaignsByPriority.p0Campaigns.slice(0, 10)
+                    },
+                    p1: {
+                        description: `${summary.p1Count}条 (P1优先级)`,
+                        campaigns: summary.campaignsByPriority.p1Campaigns.slice(0, 10)
+                    },
+                    p2: {
+                        description: `${summary.p2Count}条 (P2优先级)`,
+                        campaigns: summary.campaignsByPriority.p2Campaigns.slice(0, 10)
+                    }
+                },
+                materialIssues: Array.isArray(parsed.materialIssues) ? parsed.materialIssues : []
             };
         } catch (error) {
             console.error('Failed to parse AI response:', error);
@@ -165,24 +267,81 @@ ${diagDetailsText}
      * 生成降级结果
      */
     private generateFallbackResult(summary: DataSummary): AISummaryResult {
-        const mainProblems: string[] = [];
-
-        if (summary.problemCategories.length > 0) {
-            summary.problemCategories.slice(0, 2).forEach((p, i) => {
-                mainProblems.push(`2.${i + 1}-${p.category} (${p.percentage.toFixed(0)}%)： ${p.examples[0] || '需要关注'}`);
+        // 生成素材问题列表（使用已有的 adNames）
+        const materialIssues: AISummaryResult['materialIssues'] = [];
+        if (summary.materialIssues.length > 0) {
+            summary.materialIssues.slice(0, 3).forEach(issue => {
+                const suggestion = issue.suggestions.length > 0 ? issue.suggestions[0] : '建议排查相关素材';
+                materialIssues.push({
+                    category: issue.category,
+                    percentage: `${issue.percentage.toFixed(0)}%`,
+                    suggestion,
+                    ads: issue.adNames.slice(0, 10)
+                });
             });
         }
 
-        let suggestions = '请查看下方详细列表进行优化。';
-        if (summary.p0Count > 0) {
-            suggestions = `重点关注 ${summary.p0Count} 个 P0 级别 Campaign，优先执行预算调整。`;
+        // 如果没有素材问题，添加默认提示
+        if (materialIssues.length === 0) {
+            materialIssues.push({
+                category: '暂无Ad层级诊断数据',
+                percentage: '0%',
+                suggestion: '',
+                ads: []
+            });
         }
 
         return {
             conclusion: this.generateFallbackConclusion(summary),
-            mainProblems,
-            suggestions
+            campaignProblems: {
+                p0: {
+                    description: `${summary.p0Count}条 (P0优先级)`,
+                    campaigns: summary.campaignsByPriority.p0Campaigns.slice(0, 10)
+                },
+                p1: {
+                    description: `${summary.p1Count}条 (P1优先级)`,
+                    campaigns: summary.campaignsByPriority.p1Campaigns.slice(0, 10)
+                },
+                p2: {
+                    description: `${summary.p2Count}条 (P2优先级)`,
+                    campaigns: summary.campaignsByPriority.p2Campaigns.slice(0, 10)
+                }
+            },
+            materialIssues
         };
+    }
+
+    /**
+     * 生成降级的 MaterialIssues 列表
+     */
+    private generateFallbackMaterialIssues(summary: DataSummary): AISummaryResult['materialIssues'] {
+        const materialIssues: AISummaryResult['materialIssues'] = [];
+        if (summary.materialIssues.length > 0) {
+            summary.materialIssues.slice(0, 3).forEach(issue => {
+                const relatedAds = summary.diagnosticDetails
+                    .filter(d => d.scenario.includes(issue.category))
+                    .map(d => d.campaignName)
+                    .slice(0, 10);
+
+                const suggestion = issue.suggestions.length > 0 ? issue.suggestions[0] : '建议排查相关素材';
+                materialIssues.push({
+                    category: issue.category,
+                    percentage: `${issue.percentage.toFixed(0)}%`,
+                    suggestion,
+                    ads: relatedAds
+                });
+            });
+        }
+
+        if (materialIssues.length === 0) {
+            materialIssues.push({
+                category: '暂无Ad层级诊断数据',
+                percentage: '0%',
+                suggestion: '',
+                ads: []
+            });
+        }
+        return materialIssues;
     }
 
     /**

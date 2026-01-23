@@ -11,6 +11,7 @@ import { useConfig } from '../../contexts/ConfigContext';
 interface AIDiagnosticPanelProps {
     result: ActionItemsResult;
     diagnosticsMap: Map<string, DiagnosticDetail[]>;
+    adDiagnosticsMap?: Map<string, DiagnosticDetail[]>;  // 🆕 新增 Ad 诊断数据
 }
 
 // 暴露给父组件的方法
@@ -19,7 +20,7 @@ export interface AIDiagnosticPanelRef {
 }
 
 export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPanelProps>((
-    { result, diagnosticsMap },
+    { result, diagnosticsMap, adDiagnosticsMap },  // 🆕 添加 adDiagnosticsMap
     ref
 ) => {
     // 从 Google Sheet 获取配置
@@ -53,8 +54,8 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
         setError(null);
 
         try {
-            // 生成数据摘要
-            const dataSummary = generateDataSummary(result, diagnosticsMap);
+            // 生成数据摘要（传入 Ad 诊断数据）
+            const dataSummary = generateDataSummary(result, diagnosticsMap, adDiagnosticsMap);
 
             // 调用 Gemini API
             const geminiService = createGeminiService(apiKey);
@@ -101,27 +102,16 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
     const p1Count = result.campaigns.filter(c => c.priority === 'P1').length;
 
     return (
-        <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-6 border-2 border-amber-200 shadow-lg">
-            {/* 头部 */}
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <span className="text-3xl">🤖</span>
-                    <h3 className="text-xl font-black text-slate-900">AI 智能诊断</h3>
-                    {apiKey && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                            已连接
-                        </span>
-                    )}
-                </div>
-
-                {/* 重新生成按钮 - 只在有结果时显示 */}
-                {aiSummary && (
+        <div>
+            {/* 重新生成按钮 - 右对齐 */}
+            {aiSummary && (
+                <div className="flex justify-end mb-4">
                     <button
                         onClick={generateDiagnosis}
                         disabled={isGenerating}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${isGenerating
-                            ? 'bg-amber-300 text-amber-800 cursor-not-allowed'
-                            : 'bg-amber-500 text-white hover:bg-amber-600 shadow-md hover:shadow-lg'
+                            ? 'bg-indigo-300 text-indigo-800 cursor-not-allowed'
+                            : 'bg-indigo-500 text-white hover:bg-indigo-600 shadow-md hover:shadow-lg'
                             }`}
                     >
                         {isGenerating ? (
@@ -136,8 +126,8 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
                             </>
                         )}
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
 
             {/* 错误提示 */}
@@ -150,30 +140,87 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
 
             {/* AI 诊断结果 */}
             {aiSummary ? (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                     {/* 1. 今日诊断结论 */}
                     <div>
-                        <h4 className="font-bold text-slate-900 mb-2 text-base">1-今日诊断结论：</h4>
+                        <h4 className="font-bold text-slate-900 mb-2 text-base">今日诊断结论：</h4>
                         <p className="text-slate-700 pl-4 leading-relaxed">{aiSummary.conclusion}</p>
                     </div>
 
-                    {/* 2. 主要问题 */}
-                    {aiSummary.mainProblems.length > 0 && (
+                    {/* 2. Campaign 问题 */}
+                    <div>
+                        <h4 className="font-bold text-slate-900 mb-2 text-base">2-Campaign问题</h4>
+                        <div className="pl-4 space-y-3">
+                            {/* 2.1 P0 */}
+                            <div>
+                                <p className="text-slate-700 leading-relaxed mb-1">
+                                    <span className="font-semibold">2.1-直接关停的Campaign：</span>
+                                    {aiSummary.campaignProblems.p0.description}
+                                </p>
+                                {aiSummary.campaignProblems.p0.campaigns.length > 0 && (
+                                    <div className="pl-4 space-y-0.5">
+                                        {aiSummary.campaignProblems.p0.campaigns.map((campaign, idx) => (
+                                            <p key={idx} className="text-slate-600 text-sm">{campaign}</p>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 2.2 P1 */}
+                            <div>
+                                <p className="text-slate-700 leading-relaxed mb-1">
+                                    <span className="font-semibold">2.2-立刻优化/降预算的Campaign：</span>
+                                    {aiSummary.campaignProblems.p1.description}
+                                </p>
+                                {aiSummary.campaignProblems.p1.campaigns.length > 0 && (
+                                    <div className="pl-4 space-y-0.5">
+                                        {aiSummary.campaignProblems.p1.campaigns.map((campaign, idx) => (
+                                            <p key={idx} className="text-slate-600 text-sm">{campaign}</p>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 2.3 P2 */}
+                            <div>
+                                <p className="text-slate-700 leading-relaxed mb-1">
+                                    <span className="font-semibold">2.3-优化/观察的Campaign：</span>
+                                    {aiSummary.campaignProblems.p2.description}
+                                </p>
+                                {aiSummary.campaignProblems.p2.campaigns.length > 0 && (
+                                    <div className="pl-4 space-y-0.5">
+                                        {aiSummary.campaignProblems.p2.campaigns.map((campaign, idx) => (
+                                            <p key={idx} className="text-slate-600 text-sm">{campaign}</p>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. 素材情况 */}
+                    {aiSummary.materialIssues.length > 0 && (
                         <div>
-                            <h4 className="font-bold text-slate-900 mb-2 text-base">2-主要问题：</h4>
-                            <div className="pl-4 space-y-1">
-                                {aiSummary.mainProblems.map((problem, index) => (
-                                    <p key={index} className="text-slate-700 leading-relaxed">{problem}</p>
+                            <h4 className="font-bold text-slate-900 mb-2 text-base">3-素材情况</h4>
+                            <div className="pl-4 space-y-3">
+                                {aiSummary.materialIssues.map((issue, index) => (
+                                    <div key={index}>
+                                        <p className="text-slate-700 leading-relaxed mb-1">
+                                            <span className="font-semibold">3.{index + 1}-{issue.category}：</span>
+                                            {issue.percentage}的素材存在该问题，{issue.suggestion}
+                                        </p>
+                                        {issue.ads.length > 0 && (
+                                            <div className="pl-4 space-y-0.5">
+                                                {issue.ads.map((ad, adIdx) => (
+                                                    <p key={adIdx} className="text-slate-600 text-sm">{ad}</p>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 ))}
                             </div>
                         </div>
                     )}
-
-                    {/* 3. 建议 */}
-                    <div>
-                        <h4 className="font-bold text-slate-900 mb-2 text-base">3-建议：</h4>
-                        <p className="text-slate-700 pl-4 leading-relaxed">{aiSummary.suggestions}</p>
-                    </div>
                 </div>
             ) : !isGenerating ? (
                 /* 未生成时的提示 */

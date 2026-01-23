@@ -226,17 +226,18 @@ const checkHighCPA = (
     // 合并异常指标的诊断和建议
     let combinedDiagnosis: string;
     let combinedAction: string;
-    let priority: number;
 
     if (isDoubleKill) {
         combinedDiagnosis = '流量贵且转化差';
         combinedAction = '请排查AOV是否异常，若AOV正常则转人工判断是否关停';
-        priority = 1;
     } else {
         combinedDiagnosis = abnormalIndicators.map(p => p.diagnosis).join(' + ');
         combinedAction = abnormalIndicators.map(p => p.action).join('\n\n');
-        priority = 2;
     }
+
+    // 基于ROI比值计算优先级
+    const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+    const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
 
     // 显示所有指标的检查状态
     const allIndicatorsStatus = indicators.map(i =>
@@ -272,11 +273,15 @@ const checkLowAOV = (
 
     // 判定条件：AOV < Avg AOV × 60%
     if (aov < avgAov * 0.6) {
+        // 基于ROI比值计算优先级
+        const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+        const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
         return {
             scenario: 'AOV异常低',
             diagnosis: '人群消费力低 / 素材误导',
             action: '引流品导致客单低。\n1. 【素材问题】：检查是否在用低价配件（如线材）做素材，建议改推高客单价的主机/Bundle；在落地页加Bundle的Variant，引导用户提高单价\n2. 【受众问题】：当前人群消费力弱，建议调整为Max conv. value的Performance Goal或排除低收入人群/配件人群\n3. 【落地页问题】：在落地页/购物车页增加"Frequently Bought Together"组合购插件，或设置阶梯折扣（买2件9折）；检查免邮门槛，将免邮门槛设定在AOV的1.2倍（如AOV=$40则免邮线设$49），并在购物车顶部加进度条提示"再买$9免邮"',
-            priority: 2,
+            priority,
             metrics: { aov, avgAov }
         };
     }
@@ -359,11 +364,15 @@ const checkLowCVR = (
         i.isAbnormal ? `${i.name} ↓` : `${i.name} ✓`
     ).join(', ');
 
+    // 基于ROI比值计算优先级
+    const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+    const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
     return {
         scenario: 'CVR异常低',
         diagnosis: `${combinedDiagnosis} (${allIndicatorsStatus})`,
         action: combinedAction,
-        priority: 2,
+        priority,
         metrics: {
             ...Object.fromEntries(indicators.map(p => [p.metric, p.value])),
             cvr: metrics.cvr
@@ -430,11 +439,15 @@ const checkHighCPC = (
         i.isAbnormal ? `${i.name} ${i.direction} 异常` : `${i.name} ✓ 正常`
     ).join(', ');
 
+    // 基于ROI比值计算优先级
+    const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+    const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
     return {
         scenario: 'CPC异常高',
         diagnosis: `${combinedDiagnosis} (${allIndicatorsStatus})`,
         action: combinedAction,
-        priority: 2,
+        priority,
         metrics: {
             ...Object.fromEntries(indicators.map(p => [p.metric, p.value])),
             cpc: metrics.cpc
@@ -461,11 +474,15 @@ const checkHighCPATC = (
 
     // 素材与页面不符
     if (atc_rate < avgAtcRate * 0.9) {
+        // 基于ROI比值计算优先级
+        const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+        const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
         return {
             scenario: 'CPATC异常高',
             diagnosis: '素材与页面不符',
             action: '素材与LP信息有偏差、不一致，用户被素材吸引点击，但发现落地页不是想要的\n1. 优化素材&LP一致性',
-            priority: 2,
+            priority,
             metrics: { atc_rate, cpatc: metrics.cpatc }
         };
     }
@@ -532,11 +549,15 @@ const checkBudgetDilution = (
 
     // 判定：平均每组预算 < 1 × Avg CPA
     if (avgBudgetPerAdset < benchmarks.avgCpa) {
+        // 基于ROI比值计算优先级
+        const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+        const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
         return {
             scenario: '预算分散',
             diagnosis: '预算过度分散',
             action: `预算被严重稀释：Campaign预算只有 $${context.campaignBudget.toFixed(0)} 但开了 ${context.adsetCount} 个组，平均每组 $${avgBudgetPerAdset.toFixed(0)} 无法支撑转化\n1. 关停表现差的组，集中预算\n2. 增加总预算\n3. 缩小受众`,
-            priority: 2,
+            priority,
             metrics: {
                 campaignBudget: context.campaignBudget,
                 adsetCount: context.adsetCount,
@@ -571,11 +592,15 @@ const checkDeliveryIssue = (
             ? `\n当前Frequency: ${metrics.frequency.toFixed(1)}${metrics.frequency > 3 ? '（过高，受众疲劳）' : ''}`
             : '';
 
+        // 基于ROI比值计算优先级
+        const roiRatio = benchmarks.avgRoi > 0 ? metrics.roi / benchmarks.avgRoi : 1;
+        const priority = roiRatio < 0.5 ? 0 : roiRatio < 0.8 ? 1 : 2;
+
         return {
             scenario: '花费困难',
             diagnosis: '竞价/受众过窄',
             action: `Delivery Issue (Spend Pacing: ${(spendPacing * 100).toFixed(0)}%)${frequencyNote}\n1. 出价过低：Cost Cap建议提价，或改用Highest Volume（Lowest Cost）并取消Cost Cap限制\n2. 受众过窄/耗尽：检查Frequency是否过高，建议放宽定向\n3. 质量太差：检查质量分是否被系统降权`,
-            priority: 2,
+            priority,
             metrics: {
                 spend: metrics.spend,
                 dailyBudget: context.dailyBudget,
