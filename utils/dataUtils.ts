@@ -45,7 +45,7 @@ export const calculateMetrics = (records: RawAdRecord[]): AggregatedMetrics => {
         // 新增中间转化指标
         click_to_pv_rate: link_clicks > 0 ? landing_page_views / link_clicks : 0,
         // 验证Click-to-PV数据
-        ...(link_clicks > 0 && landing_page_views > link_clicks && console.warn(`⚠️ Click-to-PV异常: LPV=${landing_page_views}, Clicks=${link_clicks}, Rate=${((landing_page_views/link_clicks)*100).toFixed(2)}%`), {}),
+        ...(link_clicks > 0 && landing_page_views > link_clicks && console.warn(`⚠️ Click-to-PV异常: LPV=${landing_page_views}, Clicks=${link_clicks}, Rate=${((landing_page_views / link_clicks) * 100).toFixed(2)}%`), {}),
         checkout_rate: adds_to_cart > 0 ? checkouts_initiated / adds_to_cart : 0,
         purchase_rate: checkouts_initiated > 0 ? purchases / checkouts_initiated : 0,
         frequency: calculatedFrequency,
@@ -60,12 +60,21 @@ export const matchesConfig = (record: RawAdRecord, config: AdConfiguration): boo
 
     const checkRule = (rule: import('../types').FilterRule) => {
         const fieldValue = String(record[rule.field] || '').toLowerCase();
-        const targetValue = rule.value.toLowerCase();
+        // Support comma-separated values (Option A)
+        const targetValues = rule.value.toLowerCase().split(',').map(v => v.trim()).filter(v => v !== '');
+
+        if (targetValues.length === 0) return true;
 
         switch (rule.operator) {
-            case 'contains': return fieldValue.includes(targetValue);
-            case 'not_contains': return !fieldValue.includes(targetValue);
-            case 'equals': return fieldValue === targetValue;
+            case 'contains':
+                // OR Logic: Match if ANY target value is contained
+                return targetValues.some(val => fieldValue.includes(val));
+            case 'not_contains':
+                // AND Logic: Match if NONE of the target values are contained
+                return !targetValues.some(val => fieldValue.includes(val));
+            case 'equals':
+                // OR Logic: Match if properly equals ANY target value
+                return targetValues.some(val => fieldValue === val);
             default: return true;
         }
     };
@@ -82,12 +91,18 @@ export const matchesConfig = (record: RawAdRecord, config: AdConfiguration): boo
 // 匹配单个层级规则
 const matchesLayerRule = (record: RawAdRecord, rule: import('../types').LayerFilterRule): boolean => {
     const fieldValue = String(record[rule.field] || '').toLowerCase();
-    const targetValue = rule.value.toLowerCase();
+    // Support comma-separated values
+    const targetValues = rule.value.toLowerCase().split(',').map(v => v.trim()).filter(v => v !== '');
+
+    if (targetValues.length === 0) return false;
 
     switch (rule.operator) {
-        case 'contains': return fieldValue.includes(targetValue);
-        case 'not_contains': return !fieldValue.includes(targetValue);
-        case 'equals': return fieldValue === targetValue;
+        case 'contains':
+            return targetValues.some(val => fieldValue.includes(val));
+        case 'not_contains':
+            return !targetValues.some(val => fieldValue.includes(val));
+        case 'equals':
+            return targetValues.some(val => fieldValue === val);
         default: return false;
     }
 };

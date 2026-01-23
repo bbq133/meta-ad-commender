@@ -2,6 +2,8 @@ import { RawAdRecord, AdConfiguration } from '../types';
 import { QuadrantThresholds } from './quadrantUtils';
 import { calculateBenchmarkROI, calculatePriority } from './priorityUtils';
 import { diagnoseAd, convertToAdDiagnosticDetail, AdDiagnosticContext } from './adDiagnostics';
+import { calculateLayerBenchmarks, getBenchmarkForKPI } from './benchmarkService';
+import { LayerConfiguration } from '../types';
 
 // Action Item 类型定义
 
@@ -252,6 +254,7 @@ export const generateActionItems = (
     data: RawAdRecord[],
     configs: AdConfiguration[],
     businessLineThresholds: Map<string, QuadrantThresholds>,
+    layerConfig: LayerConfiguration,
     comparisonData?: RawAdRecord[]
 ): ActionItemsResult => {
     const campaigns: ActionCampaign[] = [];
@@ -328,33 +331,18 @@ export const generateActionItems = (
         const matchingData = data.filter(r => matchesConfig(r, config));
         if (matchingData.length === 0) return;
 
-        // 计算该业务线的平均 KPI
-        const avgKPI = calculateKPI(matchingData, kpiType);
+        // 计算该业务线的平均 KPI (不再使用简单的 avgKPI，而是根据层级计算)
+        // const avgKPI = calculateKPI(matchingData, kpiType);
 
-        // 计算该业务线的 Benchmark ROI (用于优先级计算)
-        // Benchmark = Total Revenue / Total Spend (加权平均)
-        let benchmarkROI: number | null = null;
-        if (kpiType === 'ROI') {
-            // 收集所有 Campaign 的 revenue 和 spend 数据
-            const campaignDataForBenchmark: Array<{ revenue: number; spend: number }> = [];
-            const tempCampaignMapForBenchmark = new Map<string, { revenue: number; spend: number }>();
+        // 计算 Layer Benchmarks (使用当前业务线的数据)
+        const layerBenchmarks = calculateLayerBenchmarks(matchingData, layerConfig);
 
-            matchingData.forEach(r => {
-                const campaignKey = r.campaign_name;
-                if (!tempCampaignMapForBenchmark.has(campaignKey)) {
-                    tempCampaignMapForBenchmark.set(campaignKey, { revenue: 0, spend: 0 });
-                }
-                const current = tempCampaignMapForBenchmark.get(campaignKey)!;
-                current.revenue += r.purchase_value;
-                current.spend += r.spend;
-            });
+        // 获取当前 KPI 类型的 Benchmark
+        const benchmarkValue = getBenchmarkForKPI(kpiType, layerBenchmarks);
+        const avgKPI = benchmarkValue; // 保持变量名兼容，但值已更新为 Layer Benchmark
 
-            tempCampaignMapForBenchmark.forEach(data => {
-                campaignDataForBenchmark.push(data);
-            });
-
-            benchmarkROI = calculateBenchmarkROI(campaignDataForBenchmark);
-        }
+        // Benchmark ROI 用于优先级计算 (如果是 ROI 类型，就是上面的 avgKPI)
+        const benchmarkROI = kpiType === 'ROI' ? benchmarkValue : null;
 
         // 计算该业务线的平均中间指标
         const avgMetrics = calculateMetrics(matchingData);

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useImperativeHandle, forwardRef, useRef } from 'react';
 import { Download, Trash2, Info, ChevronDown, ChevronRight, Lightbulb, AlertCircle, AlertTriangle, CheckCircle } from 'lucide-react';
-import { RawAdRecord, AdConfiguration } from '../../types';
+import { RawAdRecord, AdConfiguration, LayerConfiguration } from '../../types';
 import { QuadrantThresholds } from '../../utils/quadrantUtils';
 import {
     generateActionItems,
@@ -10,7 +10,7 @@ import {
     exportNewAudienceActionItemsToCSV,
     NewAudienceActionItemsResult
 } from '../../utils/actionItemsUtils';
-import { formatCurrency } from '../../utils/dataUtils';
+import { formatCurrency, matchesConfig } from '../../utils/dataUtils';
 import { LevelToggle } from '../filters/LevelToggle';
 import { SearchInput } from '../filters/SearchInput';
 import { MultiSelect } from '../filters/MultiSelect';
@@ -24,6 +24,7 @@ import { AIDiagnosticPanel, AIDiagnosticPanelRef } from './AIDiagnosticPanel';
 import { DiagnosticDetail } from '../../utils/aiSummaryUtils';
 import { useConfig } from '../../contexts/ConfigContext';
 import { diagnoseAd, AdDiagnosticContext } from '../../utils/adDiagnostics';
+import { calculateLayerBenchmarks, getCampaignLayer } from '../../utils/benchmarkService';
 
 interface ActionItemsTabProps {
     data: RawAdRecord[];
@@ -31,6 +32,7 @@ interface ActionItemsTabProps {
     dateRange: { start: string; end: string };
     businessLineThresholds: Map<string, QuadrantThresholds>;
     comparisonData?: RawAdRecord[];
+    layerConfig: LayerConfiguration;
 }
 
 export interface ActionItemsTabRef {
@@ -298,7 +300,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     configs,
     dateRange,
     businessLineThresholds,
-    comparisonData
+    comparisonData,
+    layerConfig
 }, ref) => {
     // 从 Google Sheet 获取配置
     const { config } = useConfig();
@@ -590,12 +593,35 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
         if (!filteredBlResult) return new Map<string, DiagnosticDetail[]>();
 
         const diagMap = new Map<string, DiagnosticDetail[]>();
-        const campaignBenchmarks = calculateBenchmarks(filteredBlResult.campaigns);
+
+        // 1. 按业务线预计算 Benchmarks
+        const benchmarksMap = new Map<string, ReturnType<typeof calculateLayerBenchmarks>>();
+        configs.forEach(config => {
+            // 筛选属于该业务线的数据
+            // 注意：这里使用传入的原始 data，虽然它只经过了日期筛选，但我们需要为每个业务线计算其 Benchmark
+            const blData = data.filter(r => matchesConfig(r, config));
+            if (blData.length > 0) {
+                benchmarksMap.set(config.id, calculateLayerBenchmarks(blData, layerConfig));
+            }
+        });
 
         filteredBlResult.campaigns.forEach(campaign => {
-            if (campaign.kpiType !== 'ROI' || !campaignBenchmarks) {
+            // 获取该业务线的 Benchmarks
+            const layerBenchmarks = benchmarksMap.get(campaign.businessLineId);
+
+            if (campaign.kpiType !== 'ROI' || !layerBenchmarks) {
                 return;
             }
+
+            // 获取 Campaign 所属层级
+            const layer = getCampaignLayer(campaign.campaignName, layerConfig);
+
+            // 获取对应的 CampaignBenchmarks
+            // 优先使用对应层级的数据，如果该层级无数据 (hasData=false)，则回退到 global
+            const layerKey = layer.toLowerCase() as keyof typeof layerBenchmarks;
+            const targetBenchmarks = layerBenchmarks[layerKey] && (layerBenchmarks[layerKey] as any).hasData
+                ? layerBenchmarks[layerKey]
+                : layerBenchmarks.global;
 
             const metrics = {
                 spend: campaign.spend,
@@ -628,8 +654,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                 campaignBudget: dailyBudget * activeDays
             };
 
-            // 获取诊断场景
-            const diagResults = diagnoseAllScenarios(metrics as any, campaignBenchmarks, context);
+            // 获取诊断场景 (使用新的 targetBenchmarks)
+            const diagResults = diagnoseAllScenarios(metrics as any, targetBenchmarks, context);
 
             if (diagResults.length > 0) {
                 const details: DiagnosticDetail[] = diagResults.map(result => ({
@@ -645,7 +671,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
         });
 
         return diagMap;
-    }, [filteredBlResult, dateRange, configs]);
+    }, [filteredBlResult, dateRange, configs, data, layerConfig]);
 
     // 当诊断数据变化时更新state
     React.useEffect(() => {
@@ -739,7 +765,7 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
     const handleGenerate = () => {
         setIsLoading(true);
         setTimeout(() => {
-            const blActionResult = generateActionItems(data, configs, businessLineThresholds, comparisonData);
+            const blActionResult = generateActionItems(data, configs, businessLineThresholds, layerConfig, comparisonData);
             const naActionResult = generateNewAudienceActionItems(data, configs, businessLineThresholds, dateRange.end, comparisonData);
             setBlResult(blActionResult);
             setNaResult(naActionResult);
@@ -1030,10 +1056,8 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                         return (
                                                             <tr key={campaign.id} className="border-b hover:bg-slate-50 transition-all h-24">
                                                                 {/* Campaign 名称 */}
-                                                                <td className="px-4 py-3 font-medium text-slate-900">
-                                                                    <div className="truncate max-w-[200px]" title={campaign.campaignName}>
-                                                                        {campaign.campaignName}
-                                                                    </div>
+                                                                <td className="px-4 py-3 font-medium text-slate-900 whitespace-normal break-all max-w-[250px]">
+                                                                    {campaign.campaignName}
                                                                 </td>
 
                                                                 {/* KPI 现状 */}
@@ -1415,7 +1439,9 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                                             return (
                                                                 <React.Fragment key={campaign.id}>
                                                                     <tr className="border-b hover:bg-slate-50 transition-all">
-                                                                        <td className="px-4 py-3 font-medium text-slate-900">{campaign.campaignName}</td>
+                                                                        <td className="px-4 py-3 font-medium text-slate-900 whitespace-normal break-all max-w-[300px]">
+                                                                            {campaign.campaignName}
+                                                                        </td>
                                                                         <td className="px-4 py-3 text-slate-600">{campaign.businessLine}</td>
                                                                         <td className="px-4 py-3">
                                                                             <SpendDetailCell

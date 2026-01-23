@@ -198,29 +198,7 @@ export const AIDiagnosticPanel = forwardRef<AIDiagnosticPanelRef, AIDiagnosticPa
                         </div>
                     </div>
 
-                    {/* 3. 素材情况 */}
-                    {aiSummary.materialIssues.length > 0 && (
-                        <div>
-                            <h4 className="font-bold text-slate-900 mb-2 text-base">3-素材情况</h4>
-                            <div className="pl-4 space-y-3">
-                                {aiSummary.materialIssues.map((issue, index) => (
-                                    <div key={index}>
-                                        <p className="text-slate-700 leading-relaxed mb-1">
-                                            <span className="font-semibold">3.{index + 1}-{issue.category}：</span>
-                                            {issue.percentage}的素材存在该问题，{issue.suggestion}
-                                        </p>
-                                        {issue.ads.length > 0 && (
-                                            <div className="pl-4 space-y-0.5">
-                                                {issue.ads.map((ad, adIdx) => (
-                                                    <p key={adIdx} className="text-slate-600 text-sm">{ad}</p>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+
                 </div>
             ) : !isGenerating ? (
                 /* 未生成时的提示 */

@@ -66,11 +66,12 @@ function App() {
                 budget: bl.budget,
                 targetType: bl.kpiType,
                 targetValue: bl.targetValue,
-                rules: [{
+                rules: bl.ruleValue.split(/,|，/).map(val => ({
                     field: mapRuleField(bl.ruleField),
                     operator: mapOperator(bl.ruleOperator),
-                    value: bl.ruleValue
-                }],
+                    value: val.trim()
+                })).filter(r => r.value !== ''),
+                rulesLogic: 'OR', // 默认使用 OR 逻辑以支持多值匹配（Option A）
                 campaignPeriod: {
                     startDate: '',
                     endDate: ''
@@ -451,6 +452,7 @@ function App() {
                         dateRange={{ start: startDate, end: endDate }}
                         businessLineThresholds={businessLineThresholds}
                         comparisonData={comparisonData}
+                        layerConfig={layerConfig}
                     />
                 )}
             </main>
