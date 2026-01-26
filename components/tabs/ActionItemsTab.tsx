@@ -20,7 +20,7 @@ import { toggleGuidance, getPriorityBadge, GuidanceDetailPanel } from './Guidanc
 import { diagnoseCampaign, diagnoseCampaignWithContext, DiagnosticResult, CampaignContext, convertToDetailedDiagnostic, diagnoseAllScenarios, calculateTrend, TrendInfo } from '../../utils/campaignDiagnostics';
 import { calculateBenchmarks, CampaignBenchmarks } from '../../utils/benchmarkCalculator';
 import { calculateL3DL7DROI } from '../../utils/trendCalculator';
-import { AIDiagnosticPanel, AIDiagnosticPanelRef } from './AIDiagnosticPanel';
+import { AIDiagnosticPanel, AIDiagnosticPanelRef, AIAdSummaryCard } from './AIDiagnosticPanel';
 import { DiagnosticDetail } from '../../utils/aiSummaryUtils';
 import { useConfig } from '../../contexts/ConfigContext';
 import { diagnoseAd, AdDiagnosticContext } from '../../utils/adDiagnostics';
@@ -1205,6 +1205,17 @@ export const ActionItemsTab = forwardRef<ActionItemsTabRef, ActionItemsTabProps>
                                             </>
                                         )}
                                     </div>
+                                )}
+
+                                {/* 分隔线 */}
+                                <div className="border-t border-indigo-200"></div>
+
+                                {/* 🆕 Ad 层级 AI 总结卡片 */}
+                                {filteredBlResult && (
+                                    <AIAdSummaryCard
+                                        result={filteredBlResult}
+                                        adDiagnosticsMap={adDiagnosticsMap}
+                                    />
                                 )}
                             </div>
 
