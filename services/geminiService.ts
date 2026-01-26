@@ -101,7 +101,7 @@ ${p.examples.map((ex, i) => `${i + 1}. ${ex}`).join('\n')}
 
         // 诊断详情
         const diagDetailsText = summary.diagnosticDetails.length > 0
-            ? summary.diagnosticDetails.slice(0, 8).map((d, i) => `
+            ? summary.diagnosticDetails.slice(0, 50).map((d, i) => `
 ${i + 1}. Campaign: ${d.campaignName}
    - 优先级: ${d.priority || '无'}
    - 场景: ${d.scenario}
@@ -202,12 +202,12 @@ ${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
 2. **campaignProblems** 必须包含 p0、p1、p2 三个对象
    - 每个对象包含 description（描述）和 campaigns（Campaign名称数组）
    - 从上面提供的 "Campaign 按优先级分类" 数据中提取对应优先级的Campaign名称
-   - campaigns 数组最多包含10个名称
+   - campaigns 数组包含所有对应优先级的Campaign名称，不要遗漏
 3. **materialIssues** 数组列出2-3个最严重的素材问题
    - 每个对象包含：category（问题类型）、percentage（占比）、suggestion（建议）、ads（Ad名称数组）
    - 从上面提供的 "素材问题分类统计" 数据中提取问题类型、占比和建议
    - 注意：ads 数组应该包含 Ad 名称，不是 Campaign 名称
-   - ads 数组最多包含10个名称
+   - ads 数组包含所有相关的Ad名称，不要遗漏
 4. 使用简洁的商业语言，突出数据
 5. 严格使用JSON格式
 
@@ -234,15 +234,15 @@ ${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
                 campaignProblems: parsed.campaignProblems || {
                     p0: {
                         description: `${summary.p0Count}条 (P0优先级)`,
-                        campaigns: summary.campaignsByPriority.p0Campaigns.slice(0, 10)
+                        campaigns: summary.campaignsByPriority.p0Campaigns
                     },
                     p1: {
                         description: `${summary.p1Count}条 (P1优先级)`,
-                        campaigns: summary.campaignsByPriority.p1Campaigns.slice(0, 10)
+                        campaigns: summary.campaignsByPriority.p1Campaigns
                     },
                     p2: {
                         description: `${summary.p2Count}条 (P2优先级)`,
-                        campaigns: summary.campaignsByPriority.p2Campaigns.slice(0, 10)
+                        campaigns: summary.campaignsByPriority.p2Campaigns
                     }
                 },
                 materialIssues: Array.isArray(parsed.materialIssues) ? parsed.materialIssues : []
@@ -276,7 +276,7 @@ ${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
                     category: issue.category,
                     percentage: `${issue.percentage.toFixed(0)}%`,
                     suggestion,
-                    ads: issue.adNames.slice(0, 10)
+                    ads: issue.adNames
                 });
             });
         }
@@ -296,15 +296,15 @@ ${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
             campaignProblems: {
                 p0: {
                     description: `${summary.p0Count}条 (P0优先级)`,
-                    campaigns: summary.campaignsByPriority.p0Campaigns.slice(0, 10)
+                    campaigns: summary.campaignsByPriority.p0Campaigns
                 },
                 p1: {
                     description: `${summary.p1Count}条 (P1优先级)`,
-                    campaigns: summary.campaignsByPriority.p1Campaigns.slice(0, 10)
+                    campaigns: summary.campaignsByPriority.p1Campaigns
                 },
                 p2: {
                     description: `${summary.p2Count}条 (P2优先级)`,
-                    campaigns: summary.campaignsByPriority.p2Campaigns.slice(0, 10)
+                    campaigns: summary.campaignsByPriority.p2Campaigns
                 }
             },
             materialIssues
@@ -320,8 +320,7 @@ ${issue.adNames.slice(0, 10).map((name, j) => `  ${j + 1}. ${name}`).join('\n')}
             summary.materialIssues.slice(0, 3).forEach(issue => {
                 const relatedAds = summary.diagnosticDetails
                     .filter(d => d.scenario.includes(issue.category))
-                    .map(d => d.campaignName)
-                    .slice(0, 10);
+                    .map(d => d.campaignName);
 
                 const suggestion = issue.suggestions.length > 0 ? issue.suggestions[0] : '建议排查相关素材';
                 materialIssues.push({
